@@ -1,0 +1,4451 @@
+<!DOCTYPE html>
+<html lang="ru">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Anime Pixel Fighters</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            background: #0a0a0a;
+            font-family: 'Press Start 2P', monospace;
+            overflow: hidden;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        canvas {
+            border: 3px solid #333;
+            image-rendering: pixelated;
+            image-rendering: crisp-edges;
+        }
+
+        /* Fullscreen Button */
+        #btn-fullscreen {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            width: 40px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 5px;
+            color: white;
+            font-family: 'Press Start 2P', monospace;
+            font-size: 20px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            z-index: 100;
+            user-select: none;
+        }
+
+        #btn-fullscreen:hover {
+            background: rgba(255, 255, 255, 0.4);
+        }
+
+        /* Mobile Controls */
+        #mobile-controls {
+            position: absolute;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            pointer-events: none;
+            display: none;
+            z-index: 10;
+        }
+
+        .dpad {
+            position: fixed;
+            bottom: 30px;
+            left: 30px;
+            width: 150px;
+            height: 150px;
+        }
+
+        .dpad .btn {
+            position: absolute;
+            width: 50px;
+            height: 50px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 8px;
+            color: white;
+            font-size: 20px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            user-select: none;
+            backdrop-filter: blur(5px);
+        }
+
+        .btn-up { top: 0; left: 50px; }
+        .btn-down { bottom: 0; left: 50px; }
+        .btn-left { top: 50px; left: 0; }
+        .btn-right { top: 50px; right: 0; }
+
+        .action-buttons {
+            position: fixed;
+            bottom: 30px;
+            right: 30px;
+        }
+
+        .action-buttons .btn {
+            width: 60px;
+            height: 60px;
+            background: rgba(255, 100, 100, 0.3);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 50%;
+            color: white;
+            font-size: 14px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            margin: 5px;
+            cursor: pointer;
+            backdrop-filter: blur(5px);
+            font-family: 'Press Start 2P', monospace;
+        }
+
+        .btn-punch { background: rgba(255, 100, 100, 0.4); }
+        .btn-kick { background: rgba(100, 255, 100, 0.4); }
+        .btn-special { background: rgba(100, 100, 255, 0.4); }
+        .btn-ult { background: rgba(255, 215, 0, 0.4); }
+
+        .menu-controls {
+            position: fixed;
+            top: 80px;
+            right: 30px;
+        }
+
+        .menu-controls .btn {
+            width: 80px;
+            height: 40px;
+            background: rgba(255, 255, 255, 0.2);
+            border: 2px solid rgba(255, 255, 255, 0.5);
+            border-radius: 5px;
+            color: white;
+            font-size: 10px;
+            display: block;
+            margin: 10px 0;
+            cursor: pointer;
+        }
+
+        /* Force show controls on touch devices or small screens */
+        @media (hover: none) and (pointer: coarse),
+        (max-width: 1000px) {
+            #mobile-controls {
+                display: block;
+            }
+
+            #btn-fullscreen {
+                display: flex;
+                /* Ensure it shows up */
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <canvas id="game"></canvas>
+
+    <div id="mobile-controls">
+        <div id="btn-fullscreen">⛶</div>
+        <div class="menu-controls">
+            <div class="btn btn-menu" id="btn-esc">ESC</div>
+            <div class="btn btn-menu" id="btn-enter">ENTER</div>
+        </div>
+
+        <div class="dpad">
+            <div class="btn btn-up" id="btn-up">▲</div>
+            <div class="btn btn-left" id="btn-left">◀</div>
+            <div class="btn btn-right" id="btn-right">▶</div>
+            <div class="btn btn-down" id="btn-down">▼</div>
+        </div>
+
+        <div class="action-buttons">
+            <div class="btn btn-punch" id="btn-punch">P</div>
+            <div class="btn btn-kick" id="btn-kick">K</div>
+            <div class="btn btn-block" id="btn-block">BLK</div>
+            <div class="btn btn-special" id="btn-special">SP</div>
+            <div class="btn btn-ult" id="btn-ult">ULT</div>
+            <div class="btn btn-trans" id="btn-trans">TR</div>
+        </div>
+    </div>
+
+    <script>
+        const canvas = document.getElementById('game');
+        const ctx = canvas.getContext('2d');
+
+        canvas.width = 1000;
+        canvas.height = 600;
+
+        // === GAME STATE ===
+        let gameState = 'menu'; // menu, select, fight, victory
+        let gameMode = 'vs'; // vs, training
+        let selectedP1 = 0;
+        let selectedP2 = -1;
+        let menuSelection = 0; // 0: Arcade, 1: Training
+        let selectCursor = 0;
+        let selectPhase = 1;
+        let frameCount = 0;
+        let shakeAmount = 0;
+        let particles = [];
+        let projectiles = [];
+        let hitSparks = [];
+        let comboText = [];
+        let roundTimer = 99;
+        let timerCounter = 0;
+        let pauseTimer = 0;
+        let roundWinner = '';
+        let cinematicTimer = 0;
+        let cinematicTarget = null;
+        let cinematicType = '';
+        let slowMotion = 0;
+
+        // === ARENAS ===
+        const arenas = [
+            {
+                name: 'TOURNAMENT',
+                draw: function () {
+                    // Sky gradient
+                    const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+                    grad.addColorStop(0, '#0a0a2e');
+                    grad.addColorStop(0.4, '#1a1a4e');
+                    grad.addColorStop(0.7, '#2a1a3e');
+                    grad.addColorStop(1, '#0a0a1e');
+                    ctx.fillStyle = grad;
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                    // Stars
+                    for (let i = 0; i < 50; i++) {
+                        const sx = (i * 137 + 50) % canvas.width;
+                        const sy = (i * 73 + 20) % (canvas.height * 0.5);
+                        const bright = 0.3 + Math.sin(frameCount * 0.05 + i) * 0.3;
+                        ctx.fillStyle = `rgba(255, 255, 255, ${bright})`;
+                        ctx.fillRect(sx, sy, 2, 2);
+                    }
+
+                    // Moon
+                    ctx.fillStyle = 'rgba(255, 255, 200, 0.15)';
+                    ctx.beginPath();
+                    ctx.arc(800, 80, 40, 0, Math.PI * 2);
+                    ctx.fill();
+                    ctx.fillStyle = 'rgba(255, 255, 220, 0.3)';
+                    ctx.beginPath();
+                    ctx.arc(800, 80, 35, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Mountains
+                    ctx.fillStyle = '#0d0d25';
+                    ctx.beginPath();
+                    ctx.moveTo(0, 350);
+                    for (let i = 0; i <= 20; i++) {
+                        const mx = i * 50;
+                        const my = 300 + Math.sin(i * 0.8) * 40 + Math.sin(i * 0.3) * 20;
+                        ctx.lineTo(mx, my);
+                    }
+                    ctx.lineTo(canvas.width, 450);
+                    ctx.lineTo(0, 450);
+                    ctx.fill();
+
+                    // Ground
+                    const groundGrad = ctx.createLinearGradient(0, 400, 0, canvas.height);
+                    groundGrad.addColorStop(0, '#1a1a3a');
+                    groundGrad.addColorStop(0.3, '#151530');
+                    groundGrad.addColorStop(1, '#0a0a20');
+                    ctx.fillStyle = groundGrad;
+                    ctx.fillRect(0, 400, canvas.width, 200);
+
+                    // Ground line
+                    ctx.strokeStyle = '#3a3a6a';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    ctx.moveTo(0, 402);
+                    ctx.lineTo(canvas.width, 402);
+                    ctx.stroke();
+
+                    // Ground details (tiles)
+                    ctx.strokeStyle = 'rgba(60, 60, 120, 0.3)';
+                    ctx.lineWidth = 1;
+                    for (let i = 0; i < 20; i++) {
+                        const gx = i * 55 - (frameCount * 0) % 55;
+                        ctx.beginPath();
+                        ctx.moveTo(gx, 402);
+                        ctx.lineTo(gx, canvas.height);
+                        ctx.stroke();
+                    }
+                }
+            },
+            {
+                name: 'NIGHT CITY',
+                draw: function () {
+                    // Dark City Sky
+                    const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+                    grad.addColorStop(0, '#050010');
+                    grad.addColorStop(1, '#200040');
+                    ctx.fillStyle = grad;
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                    // Far Buildings (Parallax 1)
+                    ctx.fillStyle = '#100020';
+                    for (let i = 0; i < 15; i++) {
+                        const h = 100 + Math.sin(i * 321) * 50;
+                        const x = (i * 80 - frameCount * 0.2) % (canvas.width + 100) - 50;
+                        ctx.fillRect(x, 400 - h, 90, h);
+                        // Windows
+                        ctx.fillStyle = '#301040';
+                        if (i % 2 === 0) ctx.fillRect(x + 10, 400 - h + 20, 10, 10);
+                        ctx.fillStyle = '#100020';
+                    }
+
+                    // Near Buildings (Parallax 2)
+                    ctx.fillStyle = '#0a001a';
+                    for (let i = 0; i < 10; i++) {
+                        const h = 150 + Math.sin(i * 123) * 80;
+                        const x = (i * 120 - frameCount * 0.5) % (canvas.width + 150) - 50;
+                        ctx.fillRect(x, 400 - h, 110, h);
+
+                        // Neon Signs
+                        if (i % 3 === 0) {
+                            ctx.fillStyle = `hsl(${frameCount * 2}, 100%, 50%)`;
+                            ctx.fillRect(x + 20, 400 - h + 30, 70, 5);
+                            ctx.shadowBlur = 20;
+                            ctx.shadowColor = ctx.fillStyle;
+                            ctx.fillRect(x + 20, 400 - h + 30, 70, 5);
+                            ctx.shadowBlur = 0;
+                        }
+                        ctx.fillStyle = '#0a001a';
+                    }
+
+                    // Ground
+                    const groundGrad = ctx.createLinearGradient(0, 400, 0, canvas.height);
+                    groundGrad.addColorStop(0, '#201030');
+                    groundGrad.addColorStop(1, '#100515');
+                    ctx.fillStyle = groundGrad;
+                    ctx.fillRect(0, 400, canvas.width, 200);
+
+                    // Street
+                    ctx.strokeStyle = '#AA00FF';
+                    ctx.lineWidth = 2;
+                    ctx.beginPath();
+                    // Reflections
+                    ctx.fillStyle = 'rgba(200, 0, 255, 0.1)';
+                    ctx.fillRect(0, 400, canvas.width, 200);
+                },
+                weather: 'rain'
+            },
+            {
+                name: 'BAMBOO FOREST',
+                draw: function () {
+                    // Green Sky
+                    const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+                    grad.addColorStop(0, '#001a10');
+                    grad.addColorStop(1, '#003322');
+                    ctx.fillStyle = grad;
+                    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+                    // Moon/Sun
+                    ctx.fillStyle = '#DDFFDD';
+                    ctx.beginPath();
+                    ctx.arc(200, 100, 60, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Far Bamboo
+                    ctx.fillStyle = '#002211';
+                    for (let i = 0; i < 40; i++) {
+                        const w = 5 + Math.sin(i) * 2;
+                        const x = (i * 30 - frameCount * 0.1) % (canvas.width + 50) - 20;
+                        ctx.fillRect(x, 0, w, 400);
+                        // Joints
+                        for (let j = 0; j < 10; j++) {
+                            ctx.clearRect(x, j * 40, w, 2);
+                        }
+                    }
+
+                    // Near Bamboo
+                    ctx.fillStyle = '#004422';
+                    for (let i = 0; i < 15; i++) {
+                        const w = 15 + Math.sin(i * 123) * 5;
+                        const x = (i * 80 - frameCount * 0.2) % (canvas.width + 100) - 50;
+                        ctx.fillRect(x, 0, w, 400);
+                        for (let j = 0; j < 10; j++) {
+                            ctx.clearRect(x, j * 50, w, 2);
+                        }
+                        // Joints
+                        ctx.fillStyle = '#003311';
+                        for (let j = 0; j < 10; j++) {
+                            ctx.fillRect(x - 2, j * 50 + 20, w + 4, 4);
+                        }
+                        ctx.fillStyle = '#004422';
+                    }
+
+                    // Falling Leaves
+                    for (let i = 0; i < 10; i++) {
+                        const x = (frameCount * 2 + i * 100) % canvas.width;
+                        const y = (frameCount + i * 50) % 400;
+                        ctx.fillStyle = '#88CC88';
+                        ctx.beginPath();
+                        ctx.ellipse(x, y, 6, 3, frameCount * 0.1 + i, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+
+                    // Ground
+                    ctx.fillStyle = '#001505';
+                    ctx.fillRect(0, 400, canvas.width, 200);
+
+                    // Grass
+                    ctx.fillStyle = '#004422';
+                    for (let i = 0; i < canvas.width; i += 10) {
+                        ctx.fillRect(i, 400, 4, -5 - Math.sin(i * 0.1) * 5);
+                    }
+                },
+                weather: 'sakura'
+            }
+        ];
+
+        let currentArena = arenas[0];
+        let weatherParticles = [];
+
+        function initWeather() {
+            weatherParticles = [];
+            if (!currentArena.weather) return;
+
+            const count = 100;
+            for (let i = 0; i < count; i++) {
+                weatherParticles.push({
+                    x: Math.random() * canvas.width,
+                    y: Math.random() * canvas.height,
+                    speed: 2 + Math.random() * 5,
+                    size: Math.random() * 3,
+                    osc: Math.random() * Math.PI * 2
+                });
+            }
+        }
+
+        function updateWeather() {
+            if (weatherParticles.length === 0 && currentArena.weather) initWeather();
+            if (!currentArena.weather) return;
+
+            weatherParticles.forEach(p => {
+                if (currentArena.weather === 'rain') {
+                    p.y += p.speed * 4;
+                    p.x -= 1; // Wind
+                    if (p.y > canvas.height) {
+                        p.y = -20;
+                        p.x = Math.random() * canvas.width;
+                    }
+                } else if (currentArena.weather === 'sakura') {
+                    p.y += p.speed * 0.5;
+                    p.x += Math.sin(frameCount * 0.05 + p.osc) * 1.5;
+                    if (p.y > canvas.height) {
+                        p.y = -10;
+                        p.x = Math.random() * canvas.width;
+                    }
+                }
+            });
+        }
+
+        function drawWeather() {
+            if (!currentArena.weather) return;
+
+            weatherParticles.forEach(p => {
+                if (currentArena.weather === 'rain') {
+                    ctx.fillStyle = 'rgba(150, 150, 255, 0.4)';
+                    ctx.fillRect(p.x, p.y, 1, p.speed * 3);
+                    // Splash
+                    if (Math.random() < 0.05 && p.y > 400) {
+                        ctx.fillStyle = 'rgba(200, 200, 255, 0.5)';
+                        ctx.fillRect(p.x - 2, 400 + Math.random() * 10, 5, 1);
+                    }
+                } else if (currentArena.weather === 'sakura') {
+                    ctx.fillStyle = 'rgba(255, 180, 210, 0.8)';
+                    ctx.beginPath();
+                    // Petal shape
+                    ctx.ellipse(p.x, p.y, p.size, p.size * 0.6, p.osc + frameCount * 0.1, 0, Math.PI * 2);
+                    ctx.fill();
+                }
+            });
+        }
+
+        // === CHARACTERS DATA ===
+        const characters = [
+            {
+                name: 'GOKU',
+                series: 'Dragon Ball Z',
+                color: '#FF8C00',
+                color2: '#FF6600',
+                skinColor: '#FFCC99',
+                hairColor: '#111111',
+                outfitColor: '#FF6600',
+                beltColor: '#1144AA',
+                bootColor: '#1144AA',
+                auraColor: 'rgba(0, 150, 255, 0.4)',
+                auraColor2: 'rgba(255, 255, 100, 0.3)',
+                specialColor: '#00BFFF',
+                hp: 1500, // Canonical: High durability
+                atk: 110, // Canonical: High power
+                def: 80,
+                speed: 9,
+                special: 'KAMEHAMEHA',
+                specialType: 'beam',
+                portrait: function (x, y, s, flip, fighter) { drawGoku(x, y, s, flip, fighter); },
+                auraType: 'ki',
+                transform: { name: 'SUPER SAIYAN', hairColor: '#FFD700', atkMult: 1.5, speedMult: 1.4, defMult: 1.3 }, // Massive buffs
+                useScriptArt: true
+            },
+            {
+                name: 'NARUTO',
+                series: 'Naruto',
+                color: '#FF8C00',
+                color2: '#FF6600',
+                skinColor: '#FFCC88',
+                hairColor: '#FFD700',
+                outfitColor: '#FF6600',
+                beltColor: '#222222',
+                bootColor: '#2244BB',
+                auraColor: 'rgba(255, 165, 0, 0.4)',
+                auraColor2: 'rgba(255, 100, 0, 0.3)',
+                specialColor: '#4488FF',
+                hp: 1300, // Canonical: Uzumaki reserves
+                atk: 90,
+                def: 85,
+                speed: 9,
+                special: 'RASENGAN',
+                specialType: 'rush',
+                portrait: function (x, y, s, flip, fighter) { drawNaruto(x, y, s, flip, fighter); },
+                auraType: 'chakra',
+                transform: { name: 'SAGE MODE', hairColor: '#FFD700', atkMult: 1.3, speedMult: 1.2 }
+            },
+            {
+                name: 'LUFFY',
+                series: 'One Piece',
+                color: '#CC0000',
+                color2: '#AA0000',
+                skinColor: '#FFCC99',
+                hairColor: '#111111',
+                outfitColor: '#CC0000',
+                beltColor: '#FFDD00',
+                bootColor: '#3344AA',
+                auraColor: 'rgba(255, 50, 50, 0.4)',
+                auraColor2: 'rgba(255, 150, 50, 0.3)',
+                specialColor: '#FF4444',
+                hp: 1400, // Canonical: Rubber durability
+                atk: 95,
+                def: 90,
+                speed: 8,
+                special: 'GUM GUM GATLING',
+                specialType: 'barrage',
+                portrait: function (x, y, s, flip, fighter) { drawLuffy(x, y, s, flip, fighter); },
+                auraType: 'steam',
+                transform: { name: 'GEAR 2', hairColor: '#111111', atkMult: 1.3, speedMult: 1.5 }
+            },
+            {
+                name: 'SASUKE',
+                series: 'Naruto',
+                color: '#4444AA',
+                color2: '#333388',
+                skinColor: '#FFE0CC',
+                hairColor: '#1a1a2e',
+                outfitColor: '#EEEEEE',
+                beltColor: '#6644AA',
+                bootColor: '#222222',
+                auraColor: 'rgba(100, 50, 200, 0.4)',
+                auraColor2: 'rgba(150, 100, 255, 0.3)',
+                specialColor: '#8844FF',
+                hp: 1100,
+                atk: 105, // High offense
+                def: 70,
+                speed: 11, // Fast
+                special: 'CHIDORI',
+                specialType: 'rush',
+                portrait: function (x, y, s, flip, fighter) { drawSasuke(x, y, s, flip, fighter); },
+                auraType: 'lightning',
+                transform: { name: 'CURSE MARK', hairColor: '#4444FF', atkMult: 1.35, speedMult: 1.35 }
+            },
+            {
+                name: 'ICHIGO',
+                series: 'Bleach',
+                color: '#222222',
+                color2: '#111111',
+                skinColor: '#FFCC99',
+                hairColor: '#FF6600',
+                outfitColor: '#111111',
+                beltColor: '#FFFFFF',
+                bootColor: '#222222',
+                auraColor: 'rgba(0, 100, 255, 0.4)',
+                auraColor2: 'rgba(0, 50, 200, 0.3)',
+                specialColor: '#0066FF',
+                hp: 1250,
+                atk: 100,
+                def: 75,
+                speed: 10,
+                special: 'GETSUGA TENSHO',
+                specialType: 'wave',
+                portrait: function (x, y, s, flip, fighter) { drawIchigo(x, y, s, flip, fighter); },
+                auraType: 'reiatsu',
+                transform: { name: 'HOLLOW MASK', hairColor: '#FF6600', atkMult: 1.3, speedMult: 1.3 }
+            },
+            {
+                name: 'VEGETA',
+                series: 'Dragon Ball Z',
+                color: '#1144AA',
+                color2: '#003388',
+                skinColor: '#FFCC99',
+                hairColor: '#111111',
+                outfitColor: '#EEEEEE',
+                beltColor: '#CCAA00',
+                bootColor: '#EEEEEE',
+                auraColor: 'rgba(180, 150, 255, 0.4)',
+                auraColor2: 'rgba(255, 200, 50, 0.3)',
+                specialColor: '#AA88FF',
+                hp: 1350,
+                atk: 105,
+                def: 75,
+                speed: 10,
+                special: 'GALICK GUN',
+                specialType: 'beam',
+                portrait: function (x, y, s, flip, fighter) { drawVegeta(x, y, s, flip, fighter); },
+                auraType: 'ki',
+                transform: { name: 'SUPER SAIYAN', hairColor: '#FFD700', atkMult: 1.4, speedMult: 1.25 }
+            },
+            {
+                name: 'ZORO',
+                series: 'One Piece',
+                color: '#228B22',
+                color2: '#006600',
+                skinColor: '#FFCC99',
+                hairColor: '#228B22',
+                outfitColor: '#228B22',
+                beltColor: '#CC0000',
+                bootColor: '#222222',
+                auraColor: 'rgba(50, 200, 50, 0.4)',
+                auraColor2: 'rgba(100, 255, 100, 0.3)',
+                specialColor: '#44FF44',
+                hp: 1350,
+                atk: 100,
+                def: 85,
+                speed: 8,
+                special: 'ONIGIRI',
+                specialType: 'rush',
+                portrait: function (x, y, s, flip, fighter) { drawZoro(x, y, s, flip, fighter); },
+                auraType: 'sword',
+                transform: { name: 'BANDANA', hairColor: '#228B22', atkMult: 1.35, speedMult: 1.2 }
+            },
+            {
+                name: 'SAITAMA',
+                series: 'One Punch Man',
+                color: '#FFDD00',
+                color2: '#CCAA00',
+                skinColor: '#FFCC99',
+                hairColor: '#FFCC99',
+                outfitColor: '#FFDD00',
+                beltColor: '#AA0000',
+                bootColor: '#CC0000',
+                auraColor: 'rgba(255, 255, 100, 0.5)',
+                auraColor2: 'rgba(255, 200, 50, 0.4)',
+                specialColor: '#FFFF00',
+                hp: 2500, // Lore accurate: Unbeatable
+                atk: 250, // One Punch (scaled down for gameplay)
+                def: 150,
+                speed: 12,
+                special: 'SERIOUS PUNCH',
+                specialType: 'rush',
+                portrait: function (x, y, s, flip, fighter) { drawSaitama(x, y, s, flip, fighter); },
+                auraType: 'power',
+                transform: { name: 'SERIOUS', hairColor: '#FFCC99', atkMult: 1.5, speedMult: 1.5 }
+            },
+            {
+                name: 'GOJO',
+                series: 'Jujutsu Kaisen',
+                color: '#FFFFFF',
+                color2: '#000000',
+                skinColor: '#FFCC99',
+                hairColor: '#FFFFFF',
+                outfitColor: '#111111',
+                beltColor: '#111111',
+                bootColor: '#111111',
+                auraColor: 'rgba(50, 50, 255, 0.4)',
+                auraColor2: 'rgba(255, 255, 255, 0.3)',
+                specialColor: '#AA00FF',
+                hp: 1200,
+                atk: 100,
+                def: 100, // Infinity
+                speed: 11,
+                special: 'RED',
+                specialType: 'beam',
+                portrait: function (x, y, s, flip, fighter) { drawGojo(x, y, s, flip, fighter); },
+                auraType: 'infinite',
+                transform: { name: 'SIX EYES', hairColor: '#FFFFFF', atkMult: 1.45, speedMult: 1.45 },
+            }
+        ];
+
+        const goku = characters.find(ch => ch.name === 'GOKU');
+        try {
+            fetch('код.json').then(r => r.text()).then(txt => {
+                let inline = txt.trim();
+                let mime = 'image/jpeg';
+                try {
+                    const obj = JSON.parse(txt);
+                    if (obj.inlineTransformBase64) {
+                        inline = obj.inlineTransformBase64;
+                        mime = obj.mime || mime;
+                    }
+                } catch (e) { }
+                if (goku && !goku.useScriptArt) {
+                    goku.inlineTransformBase64 = inline;
+                    goku.inlineTransformMime = mime;
+                    const dataUrl = `data:${mime};base64,${inline}`;
+                    const tImg = new Image();
+                    tImg.onload = () => {
+                        goku.loadedTransformImage = removeImageBackground(tImg);
+                    };
+                    tImg.onerror = () => {
+                        goku.loadedTransformImage = tImg;
+                    };
+                    tImg.src = dataUrl;
+                    goku.transformImageSrc = dataUrl;
+                }
+            });
+        } catch (e) { }
+
+        // Preload images
+        characters.forEach(c => {
+            if (c.useScriptArt) return;
+            if (c.inlineBase64 && (!c.imageSrc || !String(c.imageSrc).startsWith('data:'))) {
+                c.imageSrc = `data:${c.inlineMime || 'image/png'};base64,${c.inlineBase64}`;
+            }
+            if (c.inlineTransformBase64 && (!c.transformImageSrc || !String(c.transformImageSrc).startsWith('data:'))) {
+                const mt = c.inlineTransformMime || c.inlineMime || 'image/png';
+                c.transformImageSrc = `data:${mt};base64,${c.inlineTransformBase64}`;
+            }
+            if (c.imageSrc) {
+                const img = new Image();
+                img.onload = () => {
+                    // Try to remove background
+                    const processed = removeImageBackground(img);
+                    c.loadedImage = processed;
+                };
+                img.onerror = () => {
+                    // Fallback if loading fails (e.g. CORS error on crossOrigin)
+                    // Try loading without crossOrigin
+                    const fallbackImg = new Image();
+                    fallbackImg.src = c.imageSrc;
+                    c.loadedImage = fallbackImg;
+                };
+                img.src = c.imageSrc;
+                // Assign immediately so it's available
+                c.loadedImage = img;
+            }
+            if (c.transformImageSrc) {
+                const tImg = new Image();
+                tImg.onload = () => {
+                    const processed = removeImageBackground(tImg);
+                    c.loadedTransformImage = processed;
+                };
+                tImg.onerror = () => {
+                    const fallbackImg = new Image();
+                    fallbackImg.src = c.transformImageSrc;
+                    c.loadedTransformImage = fallbackImg;
+                };
+                tImg.src = c.transformImageSrc;
+                c.loadedTransformImage = tImg;
+            }
+        });
+
+        // === FIGHTER CLASS ===
+        class Fighter {
+            constructor(charIndex, x, isP2) {
+                const c = characters[charIndex];
+                this.charIndex = charIndex;
+                this.name = c.name;
+                this.x = x;
+                this.y = 400;
+                this.vx = 0;
+                this.vy = 0;
+                this.hp = c.hp;
+                this.maxHp = c.hp;
+                this.energy = 0;
+                this.maxEnergy = 100;
+                this.atk = c.atk;
+                this.def = c.def;
+                this.speed = c.speed;
+                this.facing = isP2 ? -1 : 1;
+                this.isP2 = isP2;
+                this.state = 'idle';
+                this.stateTimer = 0;
+                this.animFrame = 0;
+                this.animTimer = 0;
+                this.grounded = true;
+                this.blocking = false;
+                this.hitStun = 0;
+                this.combo = 0;
+                this.attackBox = null;
+                this.invincible = 0;
+                this.specialCooldown = 0;
+                this.scale = 3;
+                this.width = 40;
+                this.height = 60;
+                this.wins = 0;
+                this.isTransformed = false;
+            }
+
+            update(other) {
+                this.animTimer++;
+                if (this.animTimer > 8) {
+                    this.animTimer = 0;
+                    this.animFrame++;
+                }
+
+                if (this.hitStun > 0) {
+                    this.hitStun--;
+                    this.state = 'hurt';
+                    if (this.hitStun === 0) {
+                        this.state = 'idle';
+                        this.combo = 0;
+                    }
+                }
+
+                if (this.invincible > 0) this.invincible--;
+                if (this.specialCooldown > 0) this.specialCooldown--;
+
+                if (this.stateTimer > 0) {
+                    this.stateTimer--;
+                    if (this.stateTimer === 0 && this.state !== 'hurt') {
+                        this.state = 'idle';
+                        this.attackBox = null;
+                    }
+                }
+
+                // Energy regen - DISABLED (User request: accumulate only in battle)
+                // if (this.energy < this.maxEnergy) {
+                //     this.energy += 0.15;
+                // }
+
+                // Physics
+                if (!this.grounded) {
+                    this.vy += 0.6;
+                }
+                this.x += this.vx;
+                this.y += this.vy;
+
+                if (this.y >= 400) {
+                    this.y = 400;
+                    this.vy = 0;
+                    this.grounded = true;
+                    if (this.state === 'jump') this.state = 'idle';
+                }
+
+                this.vx *= 0.85;
+
+                // Boundaries
+                if (this.x < 30) this.x = 30;
+                if (this.x > canvas.width - 30) this.x = canvas.width - 30;
+
+                // Face opponent
+                if (this.state === 'idle' || this.state === 'walk') {
+                    this.facing = other.x > this.x ? 1 : -1;
+                }
+            }
+
+            punch() {
+                if (this.state !== 'idle' && this.state !== 'walk') return;
+                this.state = 'punch';
+                this.stateTimer = 12;
+                this.animFrame = 0;
+                // Move forward slightly for punch animation
+                this.vx = this.facing * 5;
+                this.attackBox = {
+                    x: this.x + this.facing * 30,
+                    y: this.y - 30,
+                    w: 35,
+                    h: 20,
+                    damage: this.atk * 0.8,
+                    knockback: 3,
+                    type: 'punch'
+                };
+            }
+
+            kick() {
+                if (this.state !== 'idle' && this.state !== 'walk') return;
+                this.state = 'kick';
+                this.stateTimer = 16;
+                this.animFrame = 0;
+                this.attackBox = {
+                    x: this.x + this.facing * 25,
+                    y: this.y - 15,
+                    w: 40,
+                    h: 25,
+                    damage: this.atk * 1.0,
+                    knockback: 5,
+                    type: 'kick'
+                };
+            }
+
+            special() {
+                if (this.energy < 50 || this.specialCooldown > 0) return;
+                if (this.state !== 'idle' && this.state !== 'walk') return;
+                this.energy -= 50;
+                this.specialCooldown = 60;
+                this.state = 'special';
+                this.stateTimer = 30;
+                this.animFrame = 0;
+
+                const c = characters[this.charIndex];
+
+                // Charging effect - создаём частицы притяжения
+                for (let i = 0; i < 30; i++) {
+                    const angle = (Math.PI * 2 * i) / 30;
+                    const distance = 50 + Math.random() * 30;
+                    particles.push({
+                        x: this.x + Math.cos(angle) * distance,
+                        y: this.y - 30 + Math.sin(angle) * distance,
+                        vx: -Math.cos(angle) * 3,
+                        vy: -Math.sin(angle) * 3,
+                        life: 20,
+                        color: c.specialColor,
+                        size: 2 + Math.random() * 3
+                    });
+                }
+
+                if (c.specialType === 'beam') {
+                    for (let i = 0; i < 5; i++) {
+                        setTimeout(() => {
+                            projectiles.push({
+                                x: this.x + this.facing * 40,
+                                y: this.y - 25,
+                                vx: this.facing * (12 + i),
+                                vy: 0,
+                                damage: this.atk * 0.5,
+                                owner: this,
+                                color: c.specialColor,
+                                size: 15 - i * 2,
+                                life: 60,
+                                type: 'beam'
+                            });
+                            // Эффект вылета луча
+                            for (let j = 0; j < 10; j++) {
+                                particles.push({
+                                    x: this.x + this.facing * 40,
+                                    y: this.y - 25,
+                                    vx: this.facing * (5 + Math.random() * 5) + (Math.random() - 0.5) * 3,
+                                    vy: (Math.random() - 0.5) * 5,
+                                    life: 15,
+                                    color: c.specialColor,
+                                    size: 3 + Math.random() * 4
+                                });
+                            }
+                        }, i * 50);
+                    }
+                } else if (c.specialType === 'rush') {
+                    this.vx = this.facing * 15;
+                    this.attackBox = {
+                        x: this.x + this.facing * 20,
+                        y: this.y - 40,
+                        w: 50,
+                        h: 50,
+                        damage: this.atk * 2.0,
+                        knockback: 12,
+                        type: 'special'
+                    };
+                    shakeAmount = 8;
+                } else if (c.specialType === 'wave') {
+                    projectiles.push({
+                        x: this.x + this.facing * 30,
+                        y: this.y - 30,
+                        vx: this.facing * 10,
+                        vy: 0,
+                        damage: this.atk * 1.8,
+                        owner: this,
+                        color: c.specialColor,
+                        size: 30,
+                        life: 50,
+                        type: 'wave'
+                    });
+                } else if (c.specialType === 'barrage') {
+                    for (let i = 0; i < 8; i++) {
+                        setTimeout(() => {
+                            this.attackBox = {
+                                x: this.x + this.facing * (30 + Math.random() * 20),
+                                y: this.y - 20 - Math.random() * 30,
+                                w: 30,
+                                h: 20,
+                                damage: this.atk * 0.4,
+                                knockback: 2,
+                                type: 'punch'
+                            };
+                            shakeAmount = 3;
+                        }, i * 60);
+                    }
+                }
+
+                // Aura burst
+                for (let i = 0; i < 30; i++) {
+                    particles.push({
+                        x: this.x,
+                        y: this.y - 30,
+                        vx: (Math.random() - 0.5) * 10,
+                        vy: (Math.random() - 0.5) * 10,
+                        life: 30 + Math.random() * 20,
+                        color: c.specialColor,
+                        size: 3 + Math.random() * 6
+                    });
+                }
+            }
+
+            ultimate() {
+                if (this.energy < 100) return;
+                if (this.state !== 'idle' && this.state !== 'walk') return;
+                this.energy = 0;
+                this.state = 'ultimate';
+                this.stateTimer = 50;
+                this.animFrame = 0;
+                this.invincible = 50;
+                shakeAmount = 15;
+                slowMotion = 20;
+
+                const c = characters[this.charIndex];
+
+                // Big aura explosion
+                for (let i = 0; i < 50; i++) {
+                    particles.push({
+                        x: this.x,
+                        y: this.y - 30,
+                        vx: (Math.random() - 0.5) * 15,
+                        vy: (Math.random() - 0.5) * 15,
+                        life: 40 + Math.random() * 30,
+                        color: c.specialColor,
+                        size: 4 + Math.random() * 8
+                    });
+                }
+
+                // Multiple projectiles or super attack
+                if (c.specialType === 'beam') {
+                    for (let i = 0; i < 3; i++) {
+                        setTimeout(() => {
+                            for (let j = -1; j <= 1; j++) {
+                                projectiles.push({
+                                    x: this.x + this.facing * 40,
+                                    y: this.y - 25 + j * 20,
+                                    vx: this.facing * 15,
+                                    vy: j * 2,
+                                    damage: this.atk * 0.8,
+                                    owner: this,
+                                    color: c.specialColor,
+                                    size: 20,
+                                    life: 80,
+                                    type: 'beam'
+                                });
+                            }
+                        }, i * 150);
+                    }
+                } else {
+                    this.vx = this.facing * 20;
+                    this.attackBox = {
+                        x: this.x + this.facing * 10,
+                        y: this.y - 50,
+                        w: 80,
+                        h: 70,
+                        damage: this.atk * 3.5,
+                        knockback: 20,
+                        type: 'ultimate'
+                    };
+                }
+            }
+
+            transform() {
+                const c = characters[this.charIndex];
+                if (!c.transform) return;
+                if (this.energy < 100) return;
+                if (this.isTransformed) return;
+                if (this.state !== 'idle' && this.state !== 'walk') return;
+
+                // Goku Cinematic Transformation
+                if (this.name === 'GOKU') {
+                    gameState = 'cinematic';
+                    cinematicTimer = 180;
+                    cinematicTarget = this;
+                    cinematicType = 'goku_transform';
+                    return;
+                }
+
+                this.energy = 0;
+            }
+
+            finishTransform() {
+                const c = characters[this.charIndex];
+                this.isTransformed = true;
+                this.atk *= c.transform.atkMult;
+                this.speed *= c.transform.speedMult;
+                if (c.transform.defMult) this.def *= c.transform.defMult;
+
+                // Transform effect
+                shakeAmount = 40;
+
+                // Massive Burst particles
+                for (let i = 0; i < 120; i++) {
+                    particles.push({
+                        x: this.x,
+                        y: this.y - 30,
+                        vx: (Math.random() - 0.5) * 25,
+                        vy: (Math.random() - 0.5) * 25,
+                        life: 80 + Math.random() * 40,
+                        color: c.transform.hairColor,
+                        size: 6 + Math.random() * 12
+                    });
+                }
+
+                // Энергетические кольца
+                for (let ring = 0; ring < 8; ring++) {
+                    setTimeout(() => {
+                        for (let angle = 0; angle < Math.PI * 2; angle += 0.2) {
+                            particles.push({
+                                x: this.x,
+                                y: this.y - 30,
+                                vx: Math.cos(angle) * (10 + ring * 2),
+                                vy: Math.sin(angle) * (10 + ring * 2),
+                                life: 60,
+                                color: c.transform.hairColor,
+                                size: 5 + Math.random() * 5
+                            });
+                        }
+                    }, ring * 80);
+                }
+
+                // Световой столб (FINAL)
+                for (let i = 0; i < 30; i++) {
+                    particles.push({
+                        x: this.x + (Math.random() - 0.5) * 40,
+                        y: this.y - 150,
+                        vx: 0,
+                        vy: 8,
+                        life: 100,
+                        color: '#FFF',
+                        size: 15 + Math.random() * 15
+                    });
+                }
+
+                // Notification
+                comboText.push({
+                    x: this.x,
+                    y: this.y - 120,
+                    text: c.transform.name,
+                    life: 90,
+                    color: c.transform.hairColor,
+                    vy: -2
+                });
+            }
+
+            jump() {
+                if (!this.grounded) return;
+                this.vy = -12;
+                this.grounded = false;
+                this.state = 'jump';
+            }
+
+            takeDamage(damage, knockback, direction) {
+                if (this.invincible > 0) return;
+
+                // Gain energy when taking damage
+                this.energy += 5;
+                if (this.energy > this.maxEnergy) this.energy = this.maxEnergy;
+
+                if (this.blocking) {
+                    damage *= 0.2;
+                    knockback *= 0.3;
+                    // Block sparks
+                    for (let i = 0; i < 8; i++) {
+                        hitSparks.push({
+                            x: this.x + this.facing * -15,
+                            y: this.y - 30 + (Math.random() - 0.5) * 20,
+                            vx: (Math.random() - 0.5) * 8,
+                            vy: (Math.random() - 0.5) * 8,
+                            life: 15,
+                            color: '#FFFFFF'
+                        });
+                    }
+                    // Small sparks in particles too
+                    for (let i = 0; i < 3; i++) {
+                        particles.push({
+                            x: this.x + this.facing * -15,
+                            y: this.y - 30,
+                            vx: (Math.random() - 0.5) * 10,
+                            vy: (Math.random() - 0.5) * 10,
+                            life: 10,
+                            color: '#FFF',
+                            size: 2,
+                            type: 'spark'
+                        });
+                    }
+                } else {
+                    // Blood / Energy particles
+                    const bloodColor = characters[this.charIndex].specialColor || '#FF0000';
+                    for (let i = 0; i < 15; i++) {
+                        particles.push({
+                            x: this.x,
+                            y: this.y - 30,
+                            vx: -direction * (Math.random() * 6 + 2),
+                            vy: -(Math.random() * 6 + 2),
+                            life: 80 + Math.random() * 40,
+                            color: Math.random() > 0.3 ? bloodColor : '#000',
+                            size: 4 + Math.random() * 4,
+                            type: 'blood'
+                        });
+                    }
+
+                    // Hit sparks
+                    for (let i = 0; i < 15; i++) {
+                        hitSparks.push({
+                            x: this.x,
+                            y: this.y - 25,
+                            vx: (Math.random() - 0.5) * 15,
+                            vy: (Math.random() - 0.5) * 15,
+                            life: 15 + Math.random() * 15,
+                            color: Math.random() > 0.5 ? '#FFFFFF' : characters[this.charIndex].color
+                        });
+                    }
+                    this.hitStun = 20;
+                    this.combo++;
+                    shakeAmount = Math.min(damage / 10, 15);
+                }
+                this.hp -= damage;
+                this.vx = direction * knockback;
+                if (this.hp < 0) this.hp = 0;
+            }
+
+            draw() {
+                const c = characters[this.charIndex];
+                ctx.save();
+                ctx.translate(this.x, this.y);
+                if (this.facing === -1) ctx.scale(-1, 1);
+
+                // Draw aura
+                if (this.state === 'special' || this.state === 'ultimate' || this.energy > 80) {
+                    this.drawAura(c);
+                }
+
+                // Flash when hit
+                if (this.hitStun > 0 && this.hitStun % 4 < 2) {
+                    ctx.globalAlpha = 0.6;
+                }
+                if (this.invincible > 0 && this.invincible % 4 < 2) {
+                    ctx.globalAlpha = 0.5;
+                }
+
+                // Draw pixel character or Sprite
+                const canUseImages = !c.useScriptArt;
+                const useTransformImg = canUseImages && this.isTransformed && c.loadedTransformImage && c.loadedTransformImage.complete && c.loadedTransformImage.naturalWidth !== 0;
+
+                if (useTransformImg) {
+                    // Draw Transformed Sprite
+                    const scale = c.transformImageScale || c.imageScale || 1;
+                    const h = 70 * scale;
+                    const ratio = c.loadedTransformImage.naturalWidth / c.loadedTransformImage.naturalHeight;
+                    const w = h * ratio;
+                    ctx.drawImage(c.loadedTransformImage, -w / 2, -h, w, h);
+                } else if (canUseImages && c.loadedImage && c.loadedImage.complete && c.loadedImage.naturalWidth !== 0) {
+                    // Draw Base Sprite
+                    const scale = c.imageScale || 1;
+                    const h = 70 * scale; // Standard height * scale
+                    const ratio = c.loadedImage.naturalWidth / c.loadedImage.naturalHeight;
+                    const w = h * ratio;
+
+                    // Visual Effect for Transformation (only if no transform image is available)
+                    if (this.isTransformed && !c.transformImageSrc) {
+                        ctx.save();
+                        ctx.filter = 'sepia(1) saturate(3) hue-rotate(10deg) brightness(1.3)'; // Golden Glow
+                        ctx.drawImage(c.loadedImage, -w / 2, -h, w, h);
+                        ctx.restore();
+                    } else {
+                        ctx.drawImage(c.loadedImage, -w / 2, -h, w, h);
+                    }
+                } else {
+                    c.portrait(0, 0, this.scale, false, this);
+                }
+
+                // Animation overlays with enhanced effects
+                const animProgress = this.stateTimer / 16; // 0-1 progress
+
+                if (this.state === 'punch') {
+                    // Motion blur trail
+                    for (let i = 0; i < 3; i++) {
+                        ctx.globalAlpha = 0.3 - i * 0.1;
+                        ctx.fillStyle = c.skinColor;
+                        const offset = -i * 5;
+                        ctx.fillRect(15 + offset, -35, 20, 8);
+                    }
+                    ctx.globalAlpha = 1;
+
+                    // Extending fist
+                    ctx.fillStyle = c.skinColor;
+                    ctx.fillRect(15, -35, 20, 8);
+
+                    // Impact flash
+                    if (this.stateTimer > 8) {
+                        ctx.fillStyle = '#FFFFFF';
+                        ctx.globalAlpha = animProgress;
+                        ctx.fillRect(33, -37, 10, 12);
+                        ctx.globalAlpha = 1;
+                    }
+
+                    // Shockwave circle at peak
+                    if (this.stateTimer === 10) {
+                        ctx.strokeStyle = c.specialColor;
+                        ctx.lineWidth = 3;
+                        ctx.globalAlpha = 0.7;
+                        ctx.beginPath();
+                        ctx.arc(40, -30, 20, 0, Math.PI * 2);
+                        ctx.stroke();
+                        ctx.globalAlpha = 1;
+                    }
+                }
+
+                if (this.state === 'kick') {
+                    // Motion blur trail for kick
+                    for (let i = 0; i < 3; i++) {
+                        ctx.globalAlpha = 0.3 - i * 0.1;
+                        ctx.fillStyle = c.bootColor;
+                        const offset = -i * 6;
+                        ctx.fillRect(15 + offset, -12, 25, 10);
+                    }
+                    ctx.globalAlpha = 1;
+
+                    // Main kick
+                    ctx.fillStyle = c.bootColor;
+                    ctx.fillRect(15, -12, 25, 10);
+
+                    // Speed lines
+                    if (this.stateTimer > 10) {
+                        ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                        ctx.lineWidth = 2;
+                        for (let i = 0; i < 4; i++) {
+                            ctx.beginPath();
+                            ctx.moveTo(10 - i * 10, -15 + i * 5);
+                            ctx.lineTo(30 - i * 10, -10 + i * 5);
+                            ctx.stroke();
+                        }
+                    }
+                }
+
+                // Movement trail effect
+                if (Math.abs(this.vx) > this.speed * 0.7) {
+                    ctx.globalAlpha = 0.2;
+                    ctx.fillStyle = c.auraColor;
+                    const trailX = this.vx > 0 ? -15 : 15;
+                    ctx.fillRect(trailX, -50, 8, 50);
+                    ctx.globalAlpha = 1;
+                }
+
+                ctx.restore();
+            }
+
+            drawAura(c) {
+                const intensity = this.state === 'ultimate' ? 2 : this.state === 'special' ? 1.5 : 0.8;
+                const time = frameCount * 0.1;
+
+                for (let i = 0; i < 3; i++) {
+                    ctx.save();
+                    ctx.globalAlpha = 0.3 * intensity / (i + 1);
+                    ctx.fillStyle = i === 0 ? c.auraColor : c.auraColor2;
+                    const size = (40 + i * 15) * intensity + Math.sin(time + i) * 5;
+                    const yOff = Math.sin(time * 2 + i) * 3;
+
+                    ctx.beginPath();
+                    ctx.ellipse(0, -30 + yOff, size * 0.6, size, 0, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    // Aura flames going up
+                    for (let j = 0; j < 5; j++) {
+                        const fx = Math.sin(time * 3 + j * 1.5) * 15;
+                        const fy = -30 - size * 0.8 - j * 8 + Math.sin(time * 4 + j) * 5;
+                        ctx.beginPath();
+                        ctx.arc(fx, fy + yOff, 5 + Math.sin(time + j) * 3, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    ctx.restore();
+                }
+            }
+        }
+
+        // Функция для обрезки краёв и удаления фона
+        function cropAndCleanImage(img) {
+            try {
+                const canvas = document.createElement('canvas');
+                canvas.width = img.width;
+                canvas.height = img.height;
+                const ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                const w = canvas.width, h = canvas.height;
+                const imageData = ctx.getImageData(0, 0, w, h);
+                const data = imageData.data;
+
+                // Очень агрессивное определение фона
+                const isBackground = (r, g, b) => {
+                    const brightness = (r + g + b) / 3;
+                    const saturation = Math.max(r, g, b) - Math.min(r, g, b);
+                    // Любой светлый пиксель с низкой насыщенностью считается фоном
+                    return brightness > 140 && saturation < 50;
+                };
+
+                // Шаг 1: Найти границы непрозрачного содержимого
+                let minX = w, maxX = 0, minY = h, maxY = 0;
+                for (let y = 0; y < h; y++) {
+                    for (let x = 0; x < w; x++) {
+                        const i = (y * w + x) * 4;
+                        const r = data[i], g = data[i + 1], b = data[i + 2];
+                        if (!isBackground(r, g, b)) {
+                            if (x < minX) minX = x;
+                            if (x > maxX) maxX = x;
+                            if (y < minY) minY = y;
+                            if (y > maxY) maxY = y;
+                        }
+                    }
+                }
+
+                // Добавляем небольшой отступ
+                const padding = 2;
+                minX = Math.max(0, minX - padding);
+                minY = Math.max(0, minY - padding);
+                maxX = Math.min(w - 1, maxX + padding);
+                maxY = Math.min(h - 1, maxY + padding);
+
+                const cropWidth = maxX - minX + 1;
+                const cropHeight = maxY - minY + 1;
+
+                // Шаг 2: Создать обрезанное изображение
+                const croppedCanvas = document.createElement('canvas');
+                croppedCanvas.width = cropWidth;
+                croppedCanvas.height = cropHeight;
+                const croppedCtx = croppedCanvas.getContext('2d');
+                const croppedData = croppedCtx.createImageData(cropWidth, cropHeight);
+                const cData = croppedData.data;
+
+                // Копируем и очищаем фон
+                for (let y = 0; y < cropHeight; y++) {
+                    for (let x = 0; x < cropWidth; x++) {
+                        const srcI = ((y + minY) * w + (x + minX)) * 4;
+                        const dstI = (y * cropWidth + x) * 4;
+                        const r = data[srcI], g = data[srcI + 1], b = data[srcI + 2];
+
+                        cData[dstI] = r;
+                        cData[dstI + 1] = g;
+                        cData[dstI + 2] = b;
+                        cData[dstI + 3] = isBackground(r, g, b) ? 0 : 255;
+                    }
+                }
+
+                croppedCtx.putImageData(croppedData, 0, 0);
+                const out = new Image();
+                out.src = croppedCanvas.toDataURL();
+                return out;
+            } catch (e) {
+                console.warn("Cannot crop/clean image:", e);
+                return img;
+            }
+        }
+
+        // Используем новую функцию для всех изображений
+        function removeImageBackground(img) {
+            return cropAndCleanImage(img);
+        }
+
+        // === PIXEL CHARACTER DRAWING FUNCTIONS ===
+
+        function drawPixelRect(x, y, w, h, color) {
+            ctx.fillStyle = color;
+            ctx.fillRect(Math.round(x), Math.round(y), Math.round(w), Math.round(h));
+        }
+
+        function drawGoku(x, y, s, flip, fighter) {
+            const f = fighter || { state: 'idle', stateTimer: 0, facing: 1, vx: 0, speed: 0, isTransformed: false };
+            const isSSJ = !!f.isTransformed;
+            const state = f.state || 'idle';
+            const stateTimer = f.stateTimer || 0;
+            const hairColor = isSSJ ? '#FFD700' : '#111111';
+            const hairHighlight = isSSJ ? '#FFFFE0' : '#333333';
+            const skinColor = '#FFCC99';
+            const skinShadow = '#DDAA77';
+            const eyeColor = isSSJ ? '#00FFFF' : '#111111';
+            const auraColor = isSSJ ? 'rgba(255, 215, 0, 0.6)' : 'rgba(0, 150, 255, 0.4)';
+            const time = frameCount * 0.1;
+            const breathe = Math.sin(time * 0.8) * 2;
+            const idleSway = Math.sin(time * 0.5) * 1.5;
+            const muscleFlexL = Math.sin(time * 1.2) * 1;
+            const muscleFlexR = Math.sin(time * 1.2 + Math.PI) * 1;
+
+            if (isSSJ && Math.random() > 0.7) {
+                const sparkX = x + (Math.random() - 0.5) * 60;
+                const sparkY = y - Math.random() * 80;
+                drawPixelRect(sparkX, sparkY, 1, 8, '#FFFF88');
+                drawPixelRect(sparkX + 1, sparkY + 2, 1, 4, '#FFFFFF');
+            }
+
+            let bodyTilt = 0, armLOffset = 0, armROffset = 0, legStance = 0;
+            let headTilt = 0, fistClench = 0;
+
+            if (state === 'idle') {
+                bodyTilt = 3 + idleSway;
+                armLOffset = -5 + muscleFlexL;
+                armROffset = 8 + muscleFlexR;
+                legStance = 4;
+                headTilt = -2;
+            } else if (state === 'walk') {
+                const walkCycle = Math.sin(frameCount * 0.3);
+                bodyTilt = walkCycle * 2;
+                armLOffset = walkCycle * 10;
+                armROffset = -walkCycle * 10;
+                legStance = walkCycle * 6;
+            } else if (state === 'punch') {
+                bodyTilt = 8;
+                armROffset = stateTimer > 8 ? 25 : -8;
+                fistClench = stateTimer > 8 ? 3 : 0;
+                headTilt = 3;
+            } else if (state === 'kick') {
+                bodyTilt = -5;
+                armLOffset = -12;
+                armROffset = -12;
+                legStance = stateTimer > 8 ? 20 : 0;
+            } else if (state === 'special' || state === 'ultimate') {
+                bodyTilt = -3;
+                armLOffset = -15;
+                armROffset = -15;
+                headTilt = -5;
+            }
+
+            const legY = y - 24;
+            const legL = { x: x - 12 - legStance, y: legY };
+            const legR = { x: x + 4 + legStance * 0.5, y: legY };
+
+            drawPixelRect(legL.x, legL.y + 8, 10, 14, '#FF6600');
+            drawPixelRect(legL.x + 1, legL.y + 12, 8, 2, '#CC4400');
+            drawPixelRect(legL.x - 2, legL.y, 11, 10, '#FF6600');
+            drawPixelRect(legL.x, legL.y + 2, 7, 6, '#DD5500');
+            drawPixelRect(legL.x + 2, legL.y + 8, 5, 3, '#FFAA88');
+            drawPixelRect(legL.x + 3, legL.y + 9, 3, 1, '#CC8866');
+
+            drawPixelRect(legR.x, legR.y + 6, 11, 16, '#FF6600');
+            drawPixelRect(legR.x + 8, legR.y + 10, 2, 12, '#CC4400');
+            drawPixelRect(legR.x - 1, legR.y - 2, 12, 10, '#FF6600');
+            drawPixelRect(legR.x + 8, legR.y, 3, 8, '#DD5500');
+            drawPixelRect(legR.x + 4, legR.y + 6, 6, 5, skinColor);
+            drawPixelRect(legR.x + 5, legR.y + 7, 4, 1, '#CC0000');
+            drawPixelRect(legR.x + 6, legR.y + 8, 2, 1, '#880000');
+
+            drawPixelRect(x - 8, legY - 4, 16, 6, '#FF6600');
+            drawPixelRect(x - 6, legY - 3, 12, 2, '#CC4400');
+
+            drawPixelRect(legL.x - 2, y - 8, 13, 8, '#1144AA');
+            drawPixelRect(legL.x - 2, y - 10, 13, 2, '#CC0000');
+            drawPixelRect(legL.x + 9, y - 8, 2, 8, '#002288');
+            drawPixelRect(legL.x + 3, y - 6, 2, 1, '#FFCC88');
+            drawPixelRect(legL.x + 5, y - 5, 2, 1, '#FFCC88');
+            drawPixelRect(legL.x + 3, y - 4, 2, 1, '#FFCC88');
+
+            drawPixelRect(legR.x, y - 6, 14, 8, '#1144AA');
+            drawPixelRect(legR.x, y - 8, 14, 2, '#CC0000');
+            drawPixelRect(legR.x + 11, y - 6, 2, 8, '#002288');
+            drawPixelRect(legR.x + 5, y - 4, 2, 1, '#FFCC88');
+            drawPixelRect(legR.x + 7, y - 3, 2, 1, '#FFCC88');
+
+            const bodyY = y - 48 + breathe + bodyTilt;
+
+            drawPixelRect(x - 10, bodyY - 2, 20, 8, '#1144AA');
+            drawPixelRect(x - 8, bodyY, 16, 2, '#0033AA');
+
+            drawPixelRect(x - 12, bodyY + 18, 24, 7, '#1144AA');
+            drawPixelRect(x - 12, bodyY + 22, 24, 3, '#002288');
+            drawPixelRect(x - 15, bodyY + 19, 4, 5, '#1144AA');
+            drawPixelRect(x - 16, bodyY + 21, 3, 8, '#1144AA');
+            drawPixelRect(x - 15, bodyY + 24, 2, 5, '#1144AA');
+            drawPixelRect(x - 16, bodyY + 23, 1, 3, '#002288');
+
+            drawPixelRect(x - 12, bodyY, 24, 20, '#FF6600');
+            drawPixelRect(x - 11, bodyY + 1, 7, 8, '#1144AA');
+            drawPixelRect(x - 10, bodyY + 2, 5, 5, skinColor);
+            drawPixelRect(x - 9, bodyY + 3, 3, 2, skinShadow);
+            drawPixelRect(x - 9, bodyY + 9, 2, 1, '#CC4400');
+            drawPixelRect(x - 11, bodyY + 8, 1, 2, '#CC4400');
+
+            drawPixelRect(x - 5, bodyY - 5, 10, 6, skinColor);
+            drawPixelRect(x - 4, bodyY - 4, 8, 2, skinShadow);
+
+            drawPixelRect(x - 2, bodyY + 8, 6, 1, '#CC0000');
+            drawPixelRect(x - 1, bodyY + 9, 4, 1, '#880000');
+
+            drawPixelRect(x - 13, bodyY - 1, 7, 14, '#FF6600');
+            drawPixelRect(x + 6, bodyY - 1, 7, 14, '#FF6600');
+            drawPixelRect(x - 12, bodyY + 1, 2, 10, '#CC4400');
+            drawPixelRect(x + 10, bodyY + 1, 2, 10, '#CC4400');
+
+            drawPixelRect(x - 10, bodyY + 10, 4, 6, '#CC4400');
+            drawPixelRect(x + 6, bodyY + 10, 4, 6, '#CC4400');
+            drawPixelRect(x - 3, bodyY + 14, 6, 2, '#DD5500');
+
+            drawPixelRect(x - 8, bodyY + 5, 6, 7, '#EEEEEE');
+            drawPixelRect(x - 7, bodyY + 6, 4, 5, '#FFFFFF');
+            drawPixelRect(x - 7, bodyY + 7, 4, 1, '#111111');
+            drawPixelRect(x - 6, bodyY + 8, 2, 3, '#111111');
+            drawPixelRect(x - 7, bodyY + 10, 4, 1, '#111111');
+
+            const armY = bodyY + 4;
+            const armLX = x - 18 + armLOffset;
+            drawPixelRect(armLX, armY - 2, 9, 10, '#FF6600');
+            drawPixelRect(armLX + 1, armY, 7, 2, '#CC4400');
+            drawPixelRect(armLX, armY + 8, 8, 8, skinColor);
+            drawPixelRect(armLX + 1, armY + 9, 6, 2, skinShadow);
+            drawPixelRect(armLX + 5, armY + 10, 2, 4, skinShadow);
+            drawPixelRect(armLX + 1, armY + 14, 6, 3, skinShadow);
+            drawPixelRect(armLX + 2, armY + 16, 7, 8, skinColor);
+            drawPixelRect(armLX + 7, armY + 18, 2, 6, skinShadow);
+            drawPixelRect(armLX + 1, armY + 22, 8, 3, '#1144AA');
+            drawPixelRect(armLX + 2, armY + 23, 6, 1, '#0033AA');
+            drawPixelRect(armLX + 2, armY + 25, 7, 6, skinColor);
+            drawPixelRect(armLX + 3, armY + 26, 5, 4, skinShadow);
+            drawPixelRect(armLX + 4, armY + 27, 3, 2, '#DDAA77');
+
+            const armRX = x + 10 + armROffset;
+            drawPixelRect(armRX, armY - 2, 9, 10, '#FF6600');
+            drawPixelRect(armRX + 1, armY, 7, 2, '#CC4400');
+            drawPixelRect(armRX + 1, armY + 8, 8, 8, skinColor);
+            drawPixelRect(armRX + 2, armY + 9, 6, 2, skinShadow);
+            drawPixelRect(armRX + 2, armY + 10, 2, 4, skinShadow);
+            drawPixelRect(armRX + 2, armY + 16, 7, 8, skinColor);
+            drawPixelRect(armRX + 2, armY + 18, 2, 6, skinShadow);
+            drawPixelRect(armRX + 1, armY + 22, 8, 3, '#1144AA');
+            drawPixelRect(armRX + 2, armY + 23, 6, 1, '#0033AA');
+            drawPixelRect(armRX + 2, armY + 25, 7 + fistClench, 6, skinColor);
+            drawPixelRect(armRX + 3, armY + 26, 5 + fistClench, 4, skinShadow);
+            drawPixelRect(armRX + 4, armY + 27, 3, 2, '#DDAA77');
+
+            if (state === 'punch' && stateTimer > 8) {
+                for (let i = 0; i < 3; i++) {
+                    drawPixelRect(armRX + 12 + i * 8, armY + 27, 6, 1, 'rgba(255, 255, 255, 0.6)');
+                }
+                drawPixelRect(armRX + 10, armY + 26, 2, 2, '#FFFFFF');
+                drawPixelRect(armRX + 12, armY + 28, 2, 2, '#FFFF88');
+            }
+
+            const headY = bodyY - 18 + headTilt;
+            drawPixelRect(x - 4, headY + 14, 8, 5, skinColor);
+            drawPixelRect(x - 3, headY + 15, 6, 2, skinShadow);
+            drawPixelRect(x - 2, headY + 14, 4, 1, skinShadow);
+
+            drawPixelRect(x - 10, headY, 20, 16, skinColor);
+            drawPixelRect(x - 11, headY + 5, 2, 7, skinColor);
+            drawPixelRect(x + 9, headY + 5, 2, 7, skinColor);
+            drawPixelRect(x - 10, headY + 6, 1, 5, skinShadow);
+            drawPixelRect(x + 10, headY + 6, 1, 5, skinShadow);
+
+            drawPixelRect(x - 10, headY + 10, 2, 6, skinShadow);
+            drawPixelRect(x + 8, headY + 10, 2, 6, skinShadow);
+            drawPixelRect(x - 7, headY + 14, 14, 2, skinShadow);
+
+            const eyeY = headY + 5;
+            const browColor = isSSJ ? '#DDAA00' : '#111111';
+            drawPixelRect(x - 8, eyeY - 1, 2, 2, browColor);
+            drawPixelRect(x - 6, eyeY, 4, 2, browColor);
+            drawPixelRect(x - 2, eyeY + 1, 2, 1, browColor);
+            drawPixelRect(x + 1, eyeY + 1, 2, 1, browColor);
+            drawPixelRect(x + 3, eyeY, 4, 2, browColor);
+            drawPixelRect(x + 7, eyeY - 1, 2, 2, browColor);
+
+            drawPixelRect(x - 7, eyeY + 2, 6, 4, '#FFFFFF');
+            drawPixelRect(x - 6, eyeY + 3, 4, 3, eyeColor);
+            drawPixelRect(x - 5, eyeY + 4, 2, 2, '#000000');
+            drawPixelRect(x - 6, eyeY + 3, 1, 1, '#FFFFFF');
+
+            drawPixelRect(x + 1, eyeY + 2, 6, 4, '#FFFFFF');
+            drawPixelRect(x + 2, eyeY + 3, 4, 3, eyeColor);
+            drawPixelRect(x + 3, eyeY + 4, 2, 2, '#000000');
+            drawPixelRect(x + 2, eyeY + 3, 1, 1, '#FFFFFF');
+
+            if (isSSJ) {
+                drawPixelRect(x - 7, eyeY + 2, 6, 4, '#CCFFFF');
+                drawPixelRect(x + 1, eyeY + 2, 6, 4, '#CCFFFF');
+            }
+
+            drawPixelRect(x - 1, eyeY + 6, 3, 3, skinShadow);
+            drawPixelRect(x, eyeY + 7, 1, 1, '#FFDDCC');
+
+            const mouthY = headY + 13;
+            if (state === 'special' || state === 'ultimate') {
+                drawPixelRect(x - 3, mouthY, 6, 3, '#884444');
+                drawPixelRect(x - 2, mouthY, 4, 1, '#FFFFFF');
+                drawPixelRect(x - 1, mouthY + 2, 2, 1, '#CC6666');
+            } else {
+                drawPixelRect(x - 3, mouthY, 6, 2, '#CC8866');
+                drawPixelRect(x - 2, mouthY, 4, 1, '#FFFFFF');
+            }
+
+            const hairY = headY - 6;
+
+            if (isSSJ) {
+                drawPixelRect(x - 14, hairY - 22, 28, 28, hairColor);
+                drawPixelRect(x - 5, hairY - 36, 10, 16, hairColor);
+                drawPixelRect(x - 3, hairY - 40, 6, 6, hairColor);
+                drawPixelRect(x - 2, hairY - 42, 4, 3, hairColor);
+                drawPixelRect(x - 3, hairY - 38, 2, 12, hairHighlight);
+                drawPixelRect(x + 1, hairY - 36, 2, 10, hairHighlight);
+
+                drawPixelRect(x - 18, hairY - 18, 8, 16, hairColor);
+                drawPixelRect(x - 20, hairY - 24, 8, 12, hairColor);
+                drawPixelRect(x - 22, hairY - 14, 10, 10, hairColor);
+                drawPixelRect(x - 16, hairY - 28, 6, 8, hairColor);
+                drawPixelRect(x - 18, hairY - 22, 2, 10, hairHighlight);
+                drawPixelRect(x - 20, hairY - 16, 3, 6, hairHighlight);
+
+                drawPixelRect(x + 10, hairY - 18, 8, 16, hairColor);
+                drawPixelRect(x + 12, hairY - 24, 8, 12, hairColor);
+                drawPixelRect(x + 12, hairY - 14, 10, 10, hairColor);
+                drawPixelRect(x + 10, hairY - 28, 6, 8, hairColor);
+                drawPixelRect(x + 12, hairY - 22, 2, 10, hairHighlight);
+                drawPixelRect(x + 15, hairY - 16, 3, 6, hairHighlight);
+
+                drawPixelRect(x - 2, hairY + 2, 5, 7, hairColor);
+                drawPixelRect(x - 1, hairY + 7, 3, 4, hairColor);
+                drawPixelRect(x, hairY + 9, 2, 2, hairColor);
+                drawPixelRect(x - 1, hairY + 3, 2, 5, hairHighlight);
+
+                drawPixelRect(x - 24, hairY - 8, 6, 10, hairColor);
+                drawPixelRect(x + 18, hairY - 8, 6, 10, hairColor);
+
+                if (frameCount % 6 < 3) {
+                    drawPixelRect(x - 18, hairY - 30, 2, 8, '#FFFFFF');
+                    drawPixelRect(x + 16, hairY - 26, 2, 6, '#FFFFFF');
+                    drawPixelRect(x - 4, hairY - 42, 2, 4, '#FFFF88');
+                }
+            } else {
+                drawPixelRect(x - 12, hairY - 10, 24, 12, hairColor);
+
+                drawPixelRect(x - 20, hairY - 6, 10, 10, hairColor);
+                drawPixelRect(x - 22, hairY - 12, 12, 8, hairColor);
+                drawPixelRect(x - 18, hairY - 16, 8, 8, hairColor);
+                drawPixelRect(x - 18, hairY - 8, 2, 8, '#000000');
+                drawPixelRect(x - 20, hairY - 12, 2, 6, '#000000');
+
+                drawPixelRect(x + 10, hairY - 6, 10, 10, hairColor);
+                drawPixelRect(x + 10, hairY - 12, 12, 8, hairColor);
+                drawPixelRect(x + 10, hairY - 16, 8, 8, hairColor);
+                drawPixelRect(x + 16, hairY - 8, 2, 8, '#000000');
+                drawPixelRect(x + 18, hairY - 12, 2, 6, '#000000');
+
+                drawPixelRect(x - 8, hairY - 14, 7, 8, hairColor);
+                drawPixelRect(x + 1, hairY - 14, 7, 8, hairColor);
+                drawPixelRect(x - 4, hairY - 18, 8, 6, hairColor);
+
+                drawPixelRect(x - 9, hairY + 2, 5, 6, hairColor);
+                drawPixelRect(x - 8, hairY + 6, 3, 3, hairColor);
+                drawPixelRect(x - 3, hairY + 4, 6, 8, hairColor);
+                drawPixelRect(x - 2, hairY + 10, 4, 3, hairColor);
+                drawPixelRect(x - 1, hairY + 12, 2, 2, hairColor);
+                drawPixelRect(x + 4, hairY + 2, 5, 5, hairColor);
+                drawPixelRect(x + 5, hairY + 6, 3, 2, hairColor);
+
+                drawPixelRect(x - 8, hairY - 8, 16, 3, hairHighlight);
+                drawPixelRect(x - 16, hairY - 10, 4, 6, hairHighlight);
+                drawPixelRect(x + 12, hairY - 10, 4, 6, hairHighlight);
+            }
+
+            if (state === 'special' || state === 'ultimate' || isSSJ) {
+                const auraIntensity = state === 'ultimate' ? 3 : state === 'special' ? 2 : 1;
+
+                for (let layer = 0; layer < 4; layer++) {
+                    ctx.save();
+                    ctx.globalAlpha = (0.4 - layer * 0.08) * auraIntensity;
+                    ctx.fillStyle = layer % 2 === 0 ? auraColor : (isSSJ ? 'rgba(255, 255, 200, 0.4)' : 'rgba(0, 100, 255, 0.3)');
+
+                    const size = (50 + layer * 18) * auraIntensity;
+                    const wobble = Math.sin(time * 2 + layer) * 6;
+
+                    ctx.beginPath();
+                    ctx.ellipse(x, y - 35 + wobble, size * 0.5, size * 1.2, 0, 0, Math.PI * 2);
+                    ctx.fill();
+
+                    for (let flame = 0; flame < 8; flame++) {
+                        const angle = (flame / 8) * Math.PI * 2 + time;
+                        const fx = x + Math.cos(angle) * (size * 0.4);
+                        const fy = y - 35 - size * 0.8 + Math.sin(time * 3 + flame) * 10;
+
+                        ctx.beginPath();
+                        ctx.moveTo(fx, fy);
+                        ctx.quadraticCurveTo(
+                            fx + Math.cos(angle) * 10,
+                            fy - 20 + Math.sin(time * 4 + flame) * 8,
+                            fx + Math.cos(angle + 0.3) * 5,
+                            fy - 30 + Math.sin(time * 5 + flame) * 12
+                        );
+                        ctx.quadraticCurveTo(
+                            fx,
+                            fy - 25,
+                            fx + Math.cos(angle - 0.3) * 5,
+                            fy - 30 + Math.sin(time * 5 + flame) * 12
+                        );
+                        ctx.fill();
+                    }
+
+                    ctx.restore();
+                }
+
+                if (Math.random() > 0.5) {
+                    const px = x + (Math.random() - 0.5) * 80;
+                    const py = y - Math.random() * 100;
+                    drawPixelRect(px, py, 2, 2, isSSJ ? '#FFFF00' : '#00CCFF');
+                }
+            }
+
+            if (state === 'punch' && stateTimer === 10) {
+                for (let ring = 0; ring < 3; ring++) {
+                    setTimeout(() => {
+                        for (let i = 0; i < 12; i++) {
+                            const angle = (i / 12) * Math.PI * 2;
+                            particles.push({
+                                x: x + f.facing * 40,
+                                y: y - 25,
+                                vx: Math.cos(angle) * (5 + ring * 2),
+                                vy: Math.sin(angle) * (5 + ring * 2),
+                                life: 15,
+                                color: '#FFFFFF',
+                                size: 2
+                            });
+                        }
+                    }, ring * 50);
+                }
+            }
+
+            if (Math.abs(f.vx) > f.speed * 0.8) {
+                ctx.globalAlpha = 0.3;
+                const trailX = f.vx > 0 ? -20 : 20;
+                for (let i = 0; i < 3; i++) {
+                    drawPixelRect(x + trailX * (i + 1) * 0.5, y - 40, 12, 60, isSSJ ? `rgba(255, 215, 0, ${0.2 - i * 0.05})` : `rgba(68, 136, 255, ${0.2 - i * 0.05})`);
+                }
+                ctx.globalAlpha = 1;
+            }
+
+            if (state === 'idle' && frameCount % 40 === 0) {
+                particles.push({
+                    x: x - 3,
+                    y: headY + 12,
+                    vx: f.facing * 2,
+                    vy: -1,
+                    life: 25,
+                    color: 'rgba(255, 255, 255, 0.4)',
+                    size: 3
+                });
+            }
+        }
+
+        function drawNaruto(x, y, s, flip, fighter) {
+            const isSage = fighter && fighter.isTransformed;
+            const state = fighter ? fighter.state : 'idle';
+            const stateTimer = fighter ? fighter.stateTimer : 0;
+
+            // Advanced animations
+            const breathe = Math.sin(frameCount * 0.12) * 1.2;
+            const walkCycle = Math.sin(frameCount * 0.25) * 4;
+            const armBreathe = Math.sin(frameCount * 0.12 + Math.PI) * 1.5;
+
+            // Dynamic poses based on state
+            let armOffset = 0, legOffset = 0, bodyTilt = 0;
+            if (state === 'walk') {
+                armOffset = walkCycle;
+                legOffset = walkCycle;
+            } else if (state === 'punch') {
+                armOffset = stateTimer > 8 ? 12 : 0;
+                bodyTilt = 2;
+            } else if (state === 'kick') {
+                legOffset = stateTimer > 8 ? 15 : 0;
+                bodyTilt = -3;
+            }
+
+            // --- LEGS (Improved ninja pants) ---
+            const legY = y - 20;
+            // Left leg
+            drawPixelRect(x - 9, legY + legOffset * 0.5, 8, 13, '#FF6600');
+            drawPixelRect(x - 9, legY + legOffset * 0.5 + 8, 2, 5, '#CC4400'); // Shadow
+            // Right leg  
+            drawPixelRect(x + 2, legY - legOffset * 0.5, 8, 13, '#FF6600');
+            drawPixelRect(x + 7, legY - legOffset * 0.5 + 8, 2, 5, '#CC4400'); // Shadow
+
+            // Knee guards (detail)
+            drawPixelRect(x - 7, legY + 4, 4, 3, '#2244BB');
+            drawPixelRect(x + 4, legY + 4, 4, 3, '#2244BB');
+
+            // --- SANDALS ---
+            drawPixelRect(x - 11 + legOffset * 0.3, y - 6, 9, 6, '#2244BB');
+            drawPixelRect(x + 1 - legOffset * 0.3, y - 6, 9, 6, '#2244BB');
+            // Toe details
+            drawPixelRect(x - 10 + legOffset * 0.3, y - 5, 3, 2, '#FFCC88');
+            drawPixelRect(x + 2 - legOffset * 0.3, y - 5, 3, 2, '#FFCC88');
+            // Straps
+            drawPixelRect(x - 6 + legOffset * 0.3, y - 4, 1, 3, '#111111');
+            drawPixelRect(x + 5 - legOffset * 0.3, y - 4, 1, 3, '#111111');
+
+            // --- BODY (Detailed Jacket) ---
+            const bodyY = y - 40 + breathe + bodyTilt;
+            // Main orange jacket
+            drawPixelRect(x - 11, bodyY, 22, 21, '#FF6600');
+
+            // Jacket shadows and folds
+            drawPixelRect(x - 11, bodyY + 12, 5, 9, '#CC4400'); // Left shadow
+            drawPixelRect(x + 6, bodyY + 12, 5, 9, '#CC4400'); // Right shadow
+            drawPixelRect(x - 8, bodyY + 16, 2, 5, '#DD5500'); // Fold detail
+
+            // Zipper
+            drawPixelRect(x - 1, bodyY + 2, 2, 18, '#222222');
+            drawPixelRect(x - 1, bodyY + 2, 1, 18, '#444444'); // Shine
+
+            // Mesh shirt underneath
+            drawPixelRect(x - 3, bodyY + 2, 6, 5, '#333333');
+            for (let i = 0; i < 3; i++) {
+                drawPixelRect(x - 2 + i * 2, bodyY + 3, 1, 1, '#555555'); // Mesh pattern
+            }
+
+            // Collar (blue, detailed)
+            drawPixelRect(x - 10, bodyY, 9, 7, '#1144CC'); // Left
+            drawPixelRect(x + 1, bodyY, 9, 7, '#1144CC'); // Right
+            drawPixelRect(x - 10, bodyY + 6, 9, 2, '#002288'); // Shadow
+            drawPixelRect(x + 1, bodyY + 6, 9, 2, '#002288');
+
+            // Uzumaki spiral badge (on left shoulder)
+            drawPixelRect(x - 8, bodyY + 1, 5, 5, '#DD0000');
+            drawPixelRect(x - 7, bodyY + 2, 3, 3, '#FFFFFF');
+            drawPixelRect(x - 6, bodyY + 3, 1, 1, '#DD0000');
+
+            // --- ARMS (Dynamic positioning) ---
+            const armY = y - 38 + breathe + armBreathe;
+            // Left arm
+            drawPixelRect(x - 17 - armOffset, armY, 7, 16, '#FF6600');
+            drawPixelRect(x - 17 - armOffset, armY + 11, 7, 5, '#CC4400'); // Elbow shadow
+            drawPixelRect(x - 17 - armOffset, armY + 16, 7, 6, '#FFCC88'); // Hand
+            drawPixelRect(x - 16 - armOffset, armY + 17, 2, 2, '#DDAA77'); // Knuckles
+
+            // Right arm (forward)
+            drawPixelRect(x + 10 + armOffset, armY, 7, 16, '#FF6600');
+            drawPixelRect(x + 10 + armOffset, armY + 11, 7, 5, '#CC4400');
+            drawPixelRect(x + 10 + armOffset, armY + 16, 7, 6, '#FFCC88');
+            drawPixelRect(x + 11 + armOffset, armY + 17, 2, 2, '#DDAA77');
+
+            // Wrist guards
+            drawPixelRect(x - 17 - armOffset, armY + 14, 7, 2, '#2244BB');
+            drawPixelRect(x + 10 + armOffset, armY + 14, 7, 2, '#2244BB');
+
+            // --- HEAD ---
+            const headY = y - 58 + breathe;
+            // Neck
+            drawPixelRect(x - 3, headY + 12, 7, 5, '#FFCC88');
+            drawPixelRect(x - 2, headY + 12, 5, 1, '#DDAA77'); // Shadow
+
+            // Face (rounder, better proportions)
+            drawPixelRect(x - 9, headY, 18, 16, '#FFCC88');
+            // Cheek shadows
+            drawPixelRect(x - 9, headY + 9, 3, 5, '#DDAA77');
+            drawPixelRect(x + 6, headY + 9, 3, 5, '#DDAA77');
+
+            // Nose
+            drawPixelRect(x - 1, headY + 9, 2, 2, '#DDAA77');
+
+            // Whisker marks (iconic!)
+            const whiskerY = headY + 9;
+            // Left whiskers
+            drawPixelRect(x - 8, whiskerY, 4, 1, '#AA7744');
+            drawPixelRect(x - 8, whiskerY + 2, 4, 1, '#AA7744');
+            drawPixelRect(x - 8, whiskerY + 4, 4, 1, '#AA7744');
+            // Right whiskers
+            drawPixelRect(x + 4, whiskerY, 4, 1, '#AA7744');
+            drawPixelRect(x + 4, whiskerY + 2, 4, 1, '#AA7744');
+            drawPixelRect(x + 4, whiskerY + 4, 4, 1, '#AA7744');
+
+            // --- HEADBAND (Konoha) ---
+            const bandY = headY - 4;
+            drawPixelRect(x - 11, bandY, 22, 7, '#3355CC'); // Blue cloth
+            drawPixelRect(x - 11, bandY + 5, 22, 2, '#1133AA'); // Shadow
+
+            // Metal plate
+            drawPixelRect(x - 5, bandY + 1, 10, 5, '#CCCCCC');
+            drawPixelRect(x - 4, bandY + 1, 1, 5, '#FFFFFF'); // Shine
+            drawPixelRect(x + 3, bandY + 4, 1, 1, '#888888'); // Shadow
+
+            // Leaf symbol
+            drawPixelRect(x - 2, bandY + 2, 5, 3, '#111111');
+            drawPixelRect(x - 1, bandY + 2, 3, 1, '#FF0000'); // Detail
+
+            // --- HAIR (Spiky blonde) ---
+            const hairY = headY - 8;
+            const hairColor = '#FFD700';
+            const hairHighlight = '#FFFF88';
+
+            // Main hair mass
+            drawPixelRect(x - 13, hairY, 26, 10, hairColor);
+
+            // Spikes (detailed)
+            drawPixelRect(x - 15, hairY - 5, 7, 9, hairColor); // Left spike
+            drawPixelRect(x - 7, hairY - 8, 6, 12, hairColor); // Center-left
+            drawPixelRect(x + 0, hairY - 7, 6, 11, hairColor); // Center-right  
+            drawPixelRect(x + 7, hairY - 4, 6, 8, hairColor); // Right spike
+            drawPixelRect(x + 13, hairY, 5, 6, hairColor); // Far right
+
+            // Hair highlights
+            drawPixelRect(x - 13, hairY - 3, 2, 5, hairHighlight);
+            drawPixelRect(x - 5, hairY - 6, 2, 6, hairHighlight);
+            drawPixelRect(x + 1, hairY - 5, 2, 5, hairHighlight);
+            drawPixelRect(x + 8, hairY - 2, 2, 4, hairHighlight);
+
+            // --- EYES ---
+            const eyeY = headY + 5;
+
+            if (isSage) {
+                // Sage Mode - Orange eye shadow + horizontal pupils
+                drawPixelRect(x - 7, eyeY - 2, 8, 6, '#FF6600');
+                drawPixelRect(x + 0, eyeY - 2, 7, 6, '#FF6600');
+
+                // Eye whites
+                drawPixelRect(x - 6, eyeY, 5, 4, '#FFFFFF');
+                drawPixelRect(x + 1, eyeY, 5, 4, '#FFFFFF');
+
+                // Yellow irises
+                drawPixelRect(x - 5, eyeY + 1, 4, 2, '#FFFF00');
+                drawPixelRect(x + 2, eyeY + 1, 3, 2, '#FFFF00');
+
+                // Horizontal bar pupils (sage)
+                drawPixelRect(x - 5, eyeY + 2, 4, 1, '#000000');
+                drawPixelRect(x + 2, eyeY + 2, 3, 1, '#000000');
+            } else {
+                // Normal eyes
+                drawPixelRect(x - 6, eyeY, 5, 4, '#FFFFFF');
+                drawPixelRect(x + 1, eyeY, 5, 4, '#FFFFFF');
+
+                // Blue irises
+                drawPixelRect(x - 5, eyeY + 1, 3, 2, '#4488FF');
+                drawPixelRect(x + 2, eyeY + 1, 3, 2, '#4488FF');
+
+                // Pupils
+                drawPixelRect(x - 4, eyeY + 1, 1, 2, '#000000');
+                drawPixelRect(x + 3, eyeY + 1, 1, 2, '#000000');
+            }
+
+            // --- MOUTH ---
+            const mouthY = headY + 12;
+            // Confident smile
+            drawPixelRect(x - 2, mouthY, 5, 2, '#DD8866');
+            drawPixelRect(x - 1, mouthY, 3, 1, '#FFFFFF'); // Teeth shine
+        }
+
+        function drawLuffy(x, y, s, flip, fighter) {
+            const isGear2 = fighter && fighter.isTransformed;
+            const state = fighter ? fighter.state : 'idle';
+            const stateTimer = fighter ? fighter.stateTimer : 0;
+
+            // Gear 2 skin turns pinkish/red
+            const skinColor = isGear2 ? '#FF8888' : '#FFCC99';
+            const vestColor = '#CC0000';
+            const shortColor = '#3344AA';
+            const beltColor = '#FFDD00';
+
+            // Animations
+            const breathe = Math.sin(frameCount * 0.15) * (isGear2 ? 2 : 1);
+            const walkCycle = Math.sin(frameCount * 0.25) * 5;
+
+            // Attack stretching logic
+            let armStretch = 0;
+            let legStretch = 0;
+            let bodyX = 0;
+
+            if (state === 'punch') {
+                // Gomu Gomu no Pistol
+                if (stateTimer > 5 && stateTimer < 14) {
+                    armStretch = 25 * (1 - Math.abs(stateTimer - 10) / 5);
+                }
+            } else if (state === 'kick') {
+                // Gomu Gomu no Whip
+                if (stateTimer > 5 && stateTimer < 14) {
+                    legStretch = 25 * (1 - Math.abs(stateTimer - 10) / 5);
+                }
+            } else if (state === 'walk') {
+                bodyX = 0;
+            }
+
+            // --- LEGS ---
+            const legY = y - 18;
+            // Shorts (Blue)
+            drawPixelRect(x - 9, legY, 8, 12, shortColor); // Left
+            drawPixelRect(x + 2, legY, 8, 12, shortColor); // Right
+            // White fur trim on shorts
+            drawPixelRect(x - 9, legY + 10, 8, 2, '#EEEEEE');
+            drawPixelRect(x + 2, legY + 10, 8, 2, '#EEEEEE');
+
+            // Skinny legs (Luffy style)
+            drawPixelRect(x - 7, legY + 12, 4, 8, skinColor);
+            drawPixelRect(x + 4, legY + 12, 4, 8, skinColor);
+
+            // Sandals (Straw)
+            drawPixelRect(x - 10 - legStretch * 0.5, y - 6, 10 + legStretch, 6, '#DAA520');
+            drawPixelRect(x + 1, y - 6, 10, 6, '#DAA520');
+            // Toes
+            drawPixelRect(x - 9 - legStretch * 0.5, y - 6, 3, 2, skinColor);
+            drawPixelRect(x + 2, y - 6, 3, 2, skinColor);
+
+            // --- BODY (Red Vest) ---
+            const bodyY = y - 42 + breathe;
+
+            // Open Vest
+            drawPixelRect(x - 11, bodyY, 22, 20, vestColor);
+            // Chest (Skin)
+            drawPixelRect(x - 5, bodyY + 1, 10, 18, skinColor);
+
+            // X-Scar on chest
+            drawPixelRect(x - 3, bodyY + 5, 6, 6, isGear2 ? '#CC4444' : '#E0A0A0');
+            drawPixelRect(x - 3, bodyY + 5, 2, 2, isGear2 ? '#AA2222' : '#D08080'); // Detail
+            drawPixelRect(x + 1, bodyY + 9, 2, 2, isGear2 ? '#AA2222' : '#D08080');
+
+            // Yellow Sash/Belt
+            drawPixelRect(x - 10, bodyY + 18, 20, 6, beltColor);
+            drawPixelRect(x - 11, bodyY + 20, 2, 6, beltColor); // Knot end
+
+            // Buttons
+            drawPixelRect(x - 10, bodyY + 5, 2, 2, '#FFDD00');
+            drawPixelRect(x + 8, bodyY + 5, 2, 2, '#FFDD00');
+
+            // --- ARMS (Stretchy!) ---
+            const armY = y - 40 + breathe;
+
+            // Left arm (Back)
+            drawPixelRect(x - 16, armY, 5, 16, skinColor);
+            drawPixelRect(x - 16, armY + 16, 5, 5, skinColor); // Hand
+
+            // Right arm (Forward - Attacking)
+            // Shoulder
+            drawPixelRect(x + 11, armY, 5, 8, skinColor);
+            // Stretched arm segment
+            drawPixelRect(x + 11, armY + 5, 5 + armStretch, 5, skinColor);
+            // Fist
+            const fistX = x + 16 + armStretch;
+            drawPixelRect(fistX, armY + 4, 7, 7, skinColor); // Big fist
+            // Haki (black) coating during special/transform
+            if (fighter && (fighter.state === 'special' || fighter.state === 'ultimate')) {
+                drawPixelRect(fistX, armY + 4, 7, 7, '#221133');
+            }
+
+            // --- HEAD ---
+            const headY = y - 56 + breathe;
+            // Neck
+            drawPixelRect(x - 3, headY + 12, 6, 4, skinColor);
+
+            // Face
+            drawPixelRect(x - 9, headY, 18, 14, skinColor);
+            // Cheek shadows
+            drawPixelRect(x - 8, headY + 8, 2, 4, isGear2 ? '#DD6666' : '#DDAA77');
+            drawPixelRect(x + 6, headY + 8, 2, 4, isGear2 ? '#DD6666' : '#DDAA77');
+
+            // Scar under eye
+            drawPixelRect(x - 7, headY + 9, 3, 1, '#CC8888');
+
+            // Straw Hat (Simpler view if looking forward)
+            const hatY = headY - 6;
+            drawPixelRect(x - 16, hatY, 32, 6, '#FFDD44'); // Brim
+            drawPixelRect(x - 16, hatY + 1, 32, 2, '#DDBB22'); // Shadow
+            drawPixelRect(x - 10, hatY - 6, 20, 8, '#FFDD44'); // Top
+            drawPixelRect(x - 10, hatY - 2, 20, 3, '#CC2222'); // Red band
+
+            // Short black hair under hat
+            drawPixelRect(x - 10, headY - 2, 20, 4, '#111111');
+            drawPixelRect(x - 10, headY, 3, 6, '#111111'); // Sideburns
+            drawPixelRect(x + 7, headY, 3, 6, '#111111');
+
+            // Eyes (Round and wide)
+            const eyeY = headY + 5;
+            drawPixelRect(x - 6, eyeY, 5, 5, '#FFFFFF');
+            drawPixelRect(x + 1, eyeY, 5, 5, '#FFFFFF');
+            drawPixelRect(x - 4, eyeY + 2, 2, 2, '#111111'); // Pupil
+            drawPixelRect(x + 3, eyeY + 2, 2, 2, '#111111');
+
+            // Big Grin
+            const mouthY = headY + 11;
+            drawPixelRect(x - 5, mouthY, 10, 3, '#FFFFFF'); // Teeth
+            drawPixelRect(x - 5, mouthY, 1, 3, '#DDAA77'); // Corner
+            drawPixelRect(x + 4, mouthY, 1, 3, '#DDAA77');
+
+            // --- GEAR 2 STEAM ---
+            if (isGear2) {
+                if (Math.random() > 0.5) {
+                    const sx = x + (Math.random() - 0.5) * 40;
+                    const sy = y - Math.random() * 60;
+                    drawPixelRect(sx, sy, 3, 3, 'rgba(255, 255, 255, 0.6)');
+                    drawPixelRect(sx + 1, sy - 2, 2, 2, 'rgba(255, 255, 255, 0.4)');
+                }
+
+                // Pump effect
+                if (frameCount % 60 < 10) {
+                    drawPixelRect(x - 12, legY, 24, 20, 'rgba(255, 100, 100, 0.3)'); // Body flash
+                }
+            }
+        }
+
+        function drawSasuke(x, y, s, flip, fighter) {
+            const isCurse = fighter && fighter.isTransformed;
+            const state = fighter ? fighter.state : 'idle';
+            const stateTimer = fighter ? fighter.stateTimer : 0;
+
+            const skinColor = isCurse ? '#AABBDD' : '#FFE0CC';
+            const shirtColor = isCurse ? '#8888AA' : '#DDDDDD'; // Darker when cursed
+            const ropeColor = '#6644AA';
+
+            // Animation vars
+            const breathe = Math.sin(frameCount * 0.1) * 1;
+            const walkCycle = Math.sin(frameCount * 0.25) * 4;
+            const armCycle = Math.cos(frameCount * 0.25) * 6;
+
+            // Dynamic pose
+            let armOffset = 0, legOffset = 0, bodyTilt = 0;
+            let drawSword = false;
+
+            if (state === 'walk') {
+                armOffset = armCycle;
+                legOffset = walkCycle;
+            } else if (state === 'punch') {
+                // Sword slash
+                drawSword = true;
+                armOffset = stateTimer > 8 ? 14 : -5;
+                bodyTilt = 3;
+            } else if (state === 'kick') {
+                legOffset = stateTimer > 8 ? 12 : 0;
+                bodyTilt = -2;
+            } else if (state === 'special' && stateTimer < 30) {
+                // Chidori charge pose
+                armOffset = -5;
+                bodyTilt = 2;
+            }
+
+            // --- CURSE MARK WINGS (Back) ---
+            if (isCurse) {
+                const wingFlap = Math.sin(frameCount * 0.2) * 5;
+                // Left Wing base
+                drawPixelRect(x - 20, y - 50 + wingFlap, 10, 30, '#332244');
+                drawPixelRect(x - 30, y - 60 + wingFlap, 20, 10, '#332244');
+                // Right Wing base
+                drawPixelRect(x + 10, y - 50 + wingFlap, 10, 30, '#332244');
+                drawPixelRect(x + 10, y - 60 + wingFlap, 20, 10, '#332244');
+            }
+
+            // --- LEGS ---
+            const legY = y - 20;
+            // Pants (Dark Blue/Black)
+            drawPixelRect(x - 9, legY + legOffset * 0.5, 8, 14, '#222233');
+            drawPixelRect(x + 2, legY - legOffset * 0.5, 8, 14, '#222233');
+
+            // Sandals
+            drawPixelRect(x - 10 + legOffset * 0.3, y - 6, 9, 6, '#111111');
+            drawPixelRect(x + 2 - legOffset * 0.3, y - 6, 9, 6, '#111111');
+            // Toes
+            drawPixelRect(x - 9 + legOffset * 0.3, y - 6, 3, 2, skinColor);
+            drawPixelRect(x + 3 - legOffset * 0.3, y - 6, 3, 2, skinColor);
+
+            // --- BODY (White Shirt / Akatsuki Robe open) ---
+            const bodyY = y - 42 + breathe + bodyTilt;
+
+            // Main Shirt
+            drawPixelRect(x - 11, bodyY, 22, 22, shirtColor);
+            // Open Chest
+            drawPixelRect(x - 4, bodyY + 1, 8, 10, skinColor);
+            // Collar
+            drawPixelRect(x - 11, bodyY, 22, 6, shirtColor); // High collar
+            drawPixelRect(x - 11, bodyY + 2, 3, 18, '#CCCCCC'); // Left Texture
+            drawPixelRect(x + 9, bodyY + 2, 2, 18, '#CCCCCC'); // Right Texture
+
+            // Purple Rope Belt
+            drawPixelRect(x - 12, bodyY + 18, 24, 6, ropeColor);
+            drawPixelRect(x - 10, bodyY + 20, 20, 2, '#442288'); // Shadow
+            // Rope knot
+            if (state !== 'walk') {
+                drawPixelRect(x - 14, bodyY + 19, 4, 8, ropeColor);
+                drawPixelRect(x + 11, bodyY + 19, 4, 8, ropeColor);
+            }
+
+            // --- ARMS ---
+            const armY = y - 40 + breathe;
+
+            // Sword Sheath (on back)
+            if (!drawSword) {
+                drawPixelRect(x - 8, y - 30, 20, 4, '#111111');
+            }
+
+            // Left Arm
+            drawPixelRect(x - 16 - armOffset, armY, 6, 10, '#EEEEEE'); // Sleeve
+            drawPixelRect(x - 15 - armOffset, armY + 10, 4, 8, '#222233'); // Arm Warmer
+            drawPixelRect(x - 15 - armOffset, armY + 18, 4, 4, skinColor); // Hand
+
+            // Right Arm
+            let rArmX = x + 10 + armOffset;
+            drawPixelRect(rArmX, armY, 6, 10, '#EEEEEE'); // Sleeve
+            drawPixelRect(rArmX + 1, armY + 10, 4, 8, '#222233'); // Arm Warmer
+
+            if (drawSword) {
+                // Holding Sword
+                drawPixelRect(rArmX + 1, armY + 18, 4, 4, skinColor); // Hand
+                // Kusanagi Blade
+                drawPixelRect(rArmX + 4, armY + 12, 20, 3, '#DDDDDD'); // Blade
+                drawPixelRect(rArmX + 2, armY + 16, 4, 2, '#111111'); // Hilt
+            } else if (state === 'special' && Math.random() > 0.5) {
+                // Chidori Sparkling Hand
+                drawPixelRect(rArmX + 1, armY + 18, 4, 4, skinColor);
+                drawPixelRect(rArmX - 5, armY + 10, 20, 20, 'rgba(100, 200, 255, 0.4)'); // Glow
+                drawPixelRect(rArmX + 2, armY + 15, 10, 2, '#88CCFF'); // Spark
+                drawPixelRect(rArmX + 4, armY + 22, 2, 8, '#88CCFF'); // Spark
+            } else {
+                drawPixelRect(rArmX + 1, armY + 18, 4, 4, skinColor);
+            }
+
+            // --- HEAD ---
+            const headY = y - 58 + breathe;
+            // Neck
+            drawPixelRect(x - 3, headY + 12, 6, 4, skinColor);
+
+            // Face
+            drawPixelRect(x - 8, headY, 16, 14, skinColor);
+
+            // Hair (Duck-butt / Spiky back)
+            drawPixelRect(x - 10, headY - 4, 20, 10, '#111122');
+            drawPixelRect(x - 12, headY - 2, 4, 8, '#111122');
+            drawPixelRect(x + 8, headY - 2, 4, 8, '#111122');
+            // Back Spikes
+            drawPixelRect(x - 14, headY - 6, 6, 6, '#111122');
+            drawPixelRect(x + 8, headY - 6, 6, 6, '#111122');
+            drawPixelRect(x - 4, headY - 8, 8, 6, '#111122');
+
+            // Bangs (covering sides)
+            drawPixelRect(x - 8, headY, 4, 8, '#111122');
+            drawPixelRect(x + 4, headY, 4, 8, '#111122');
+
+            // Eyes (Sharingan / Rinnegan)
+            const eyeY = headY + 5;
+
+            if (isCurse) {
+                // Cursed Eyes (Yellow/Black sclera)
+                drawPixelRect(x - 6, eyeY, 5, 4, '#FFFF00');
+                drawPixelRect(x + 1, eyeY, 5, 4, '#FFFF00');
+                drawPixelRect(x - 4, eyeY + 1, 2, 2, '#000000');
+                drawPixelRect(x + 3, eyeY + 1, 2, 2, '#000000');
+            } else {
+                // Sharingan (Red)
+                drawPixelRect(x - 6, eyeY, 5, 4, '#FFFFFF');
+                drawPixelRect(x + 1, eyeY, 5, 4, '#FFFFFF');
+                drawPixelRect(x - 5, eyeY + 1, 3, 3, '#CC0000');
+                drawPixelRect(x + 2, eyeY + 1, 3, 3, '#CC0000');
+                // Tomoe
+                drawPixelRect(x - 4, eyeY + 2, 1, 1, '#000000');
+                drawPixelRect(x + 3, eyeY + 2, 1, 1, '#000000');
+            }
+
+            // Mouth (Serious/Frown)
+            drawPixelRect(x - 2, headY + 12, 4, 1, '#AA8877');
+
+            // --- CHIDORI SPARKS ---
+            if (state === 'special' || state === 'ultimate') {
+                for (let i = 0; i < 3; i++) {
+                    if (Math.random() > 0.5) {
+                        const sx = x + (Math.random() - 0.5) * 30;
+                        const sy = y - (Math.random()) * 40;
+                        drawPixelRect(sx, sy, 5, 1, '#AAEEFF');
+                    }
+                }
+            }
+        }
+
+        function drawIchigo(x, y, s, flip, fighter) {
+            const isHollow = fighter && fighter.isTransformed;
+            const state = fighter ? fighter.state : 'idle';
+            const stateTimer = fighter ? fighter.stateTimer : 0;
+
+            // Animation
+            const breathe = Math.sin(frameCount * 0.1) * 1;
+            const walkCycle = Math.sin(frameCount * 0.25) * 4;
+
+            // Dynamic pose
+            let armOffset = 0, legOffset = 0, bodyTilt = 0;
+            let swordAngle = -Math.PI / 4; // Default on back
+            let swordX = 0, swordY = 0;
+            let holdingSword = false;
+
+            if (state === 'walk') {
+                legOffset = walkCycle;
+                armOffset = walkCycle;
+            } else if (state === 'punch') {
+                // Sword slash
+                holdingSword = true;
+                swordAngle = Math.PI / 4 + (stateTimer < 10 ? -Math.PI / 2 : 0);
+                armOffset = 10;
+                bodyTilt = 5;
+            } else if (state === 'kick') {
+                legOffset = stateTimer > 8 ? 14 : 0;
+                bodyTilt = -2;
+            } else if (state === 'special') {
+                // Getsuga charge
+                holdingSword = true;
+                swordAngle = -Math.PI / 2;
+                if (Math.random() > 0.5) {
+                    // Reiatsu leak
+                    const rx = x + (Math.random() - 0.5) * 40;
+                    const ry = y + (Math.random() - 0.5) * 40;
+                    drawPixelRect(rx, ry, 2, 8, isHollow ? '#000000' : '#00AAFF');
+                }
+            }
+
+            // --- LEGS (Hakama) ---
+            const legY = y - 22;
+            // Left leg
+            drawPixelRect(x - 10, legY + legOffset * 0.5, 9, 16, '#111111');
+            drawPixelRect(x - 10, legY + legOffset * 0.5 + 10, 2, 6, '#000000'); // Shadow
+            // Right leg
+            drawPixelRect(x + 1, legY - legOffset * 0.5, 9, 16, '#111111');
+            drawPixelRect(x + 8, legY - legOffset * 0.5 + 10, 2, 6, '#000000'); // Shadow
+
+            // Shoes (Sandals with socks)
+            drawPixelRect(x - 10 + legOffset * 0.3, y - 6, 9, 6, '#333333');
+            drawPixelRect(x + 2 - legOffset * 0.3, y - 6, 9, 6, '#333333');
+            // White socks tone
+            drawPixelRect(x - 9 + legOffset * 0.3, y - 8, 7, 2, '#EEEEEE');
+            drawPixelRect(x + 3 - legOffset * 0.3, y - 8, 7, 2, '#EEEEEE');
+
+            // --- BODY (Shihakusho) ---
+            const bodyY = y - 42 + breathe + bodyTilt;
+
+            // Black Robe
+            drawPixelRect(x - 12, bodyY, 24, 22, '#111111');
+            // Chest area (White undergarment)
+            drawPixelRect(x - 4, bodyY, 8, 8, '#EEEEEE');
+            drawPixelRect(x - 1, bodyY + 1, 2, 8, '#CCCCCC'); // Shadow
+            // Robe opening V
+            drawPixelRect(x - 12, bodyY, 10, 10, '#111111');
+            drawPixelRect(x + 2, bodyY, 10, 10, '#111111');
+
+            // White Obi Sash
+            drawPixelRect(x - 12, bodyY + 16, 24, 4, '#EEEEEE');
+            drawPixelRect(x - 10, bodyY + 20, 4, 8, '#EEEEEE'); // Knot hang
+
+            // --- SWORD (Zangetsu) ---
+            // If not holding, it's on back
+            if (!holdingSword) {
+                // Handle peeking over right shoulder
+                drawPixelRect(x + 10, bodyY - 15, 4, 15, '#EEEEEE'); // Handle wrapping
+                drawPixelRect(x + 12, bodyY - 15, 2, 15, '#CCCCCC'); // Shadow
+                // Huge blade on back (wrapped or not? Shikai is cleaver)
+                drawPixelRect(x - 5, bodyY - 20, 12, 40, '#222222'); // Blade back view?
+                drawPixelRect(x - 3, bodyY - 18, 8, 36, '#444444'); // Shine
+            }
+
+            // --- ARMS ---
+            const armY = y - 40 + breathe;
+
+            // Left Arm
+            drawPixelRect(x - 17 - armOffset, armY, 6, 14, '#111111'); // Sleeve
+            drawPixelRect(x - 17 - armOffset, armY + 14, 5, 5, '#FFCC99'); // Hand
+
+            // Right Arm
+            let rArmX = x + 11 + armOffset;
+            drawPixelRect(rArmX, armY, 6, 14, '#111111'); // Sleeve
+
+            if (holdingSword) {
+                // Hand holding sword
+                drawPixelRect(rArmX, armY + 14, 5, 5, '#FFCC99');
+
+                // Draw Zangetsu (Shikai Cleaver)
+                // We need to draw rotated context for sword
+                // Saving context is tricky here as we don't have direct access to ctx from this function scope usually
+                // But wait, the function likely runs inside a context where ctx is global or available?
+                // The logical file structure suggests `ctx` is global.
+                // However, `drawPixelRect` is a helper.
+                // If I use `ctx.save()`, I must be sure `ctx` is available.
+                // Checking previous code... `drawVictoryScreen` used `ctx`. `drawHUD` used `ctx`.
+                // yes `ctx` is global.
+
+                ctx.save();
+                // Translate to hand position
+                ctx.translate(rArmX + 2, armY + 16);
+                ctx.rotate(swordAngle * (flip ? -1 : 1));
+
+                if (isHollow) {
+                    // Bankai (Black Katana) - Tensa Zangetsu
+                    ctx.fillStyle = '#000000';
+                    ctx.fillRect(0, -60, 4, 70); // Thin blade
+                    ctx.fillStyle = '#FFFFFF'; // Edge
+                    ctx.fillRect(0, -60, 1, 70);
+                    // Manji guard
+                    ctx.fillStyle = '#000000';
+                    ctx.fillRect(-6, 0, 16, 4);
+                } else {
+                    // Shikai (Huge Cleaver)
+                    ctx.fillStyle = '#CCCCCC'; // Blade
+                    ctx.fillRect(0, -70, 15, 80);
+                    ctx.fillStyle = '#EEEEEE'; // Edge
+                    ctx.fillRect(10, -70, 5, 80);
+                    // Wrapping on handle
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.fillRect(0, 0, 4, 15);
+                }
+                ctx.restore();
+            } else {
+                drawPixelRect(rArmX, armY + 14, 5, 5, '#FFCC99');
+            }
+
+            // --- HEAD ---
+            const headY = y - 58 + breathe;
+            // Neck
+            drawPixelRect(x - 3, headY + 12, 6, 4, '#FFCC99');
+
+            // Head base
+            drawPixelRect(x - 8, headY, 16, 14, '#FFCC99');
+
+            // Hollow Mask
+            if (isHollow) {
+                drawPixelRect(x - 9, headY - 1, 18, 16, '#FFFFFF'); // White mask
+                // Red stripes
+                drawPixelRect(x - 7, headY, 3, 16, '#CC0000');
+                drawPixelRect(x - 7, headY + 4, 16, 2, '#CC0000');
+            }
+
+            // Hair (Orange Spiky)
+            const hairY = headY - 6;
+            drawPixelRect(x - 11, hairY, 22, 10, '#FF6600');
+            drawPixelRect(x - 13, hairY + 2, 4, 8, '#FF6600'); // Side
+            drawPixelRect(x + 9, hairY + 2, 4, 8, '#FF6600'); // Side
+            drawPixelRect(x - 8, hairY - 4, 6, 6, '#FF6600'); // Top spike
+            drawPixelRect(x + 2, hairY - 5, 6, 6, '#FF6600'); // Top spike
+
+            // Eyes
+            const eyeY = headY + 5;
+            if (isHollow) {
+                // Hollow Eyes (Black with Yellow pupils)
+                drawPixelRect(x - 6, eyeY, 5, 4, '#000000');
+                drawPixelRect(x + 1, eyeY, 5, 4, '#000000');
+                drawPixelRect(x - 4, eyeY + 1, 2, 2, '#FFFF00');
+                drawPixelRect(x + 3, eyeY + 1, 2, 2, '#FFFF00');
+            } else {
+                // Brown/Amber eyes
+                drawPixelRect(x - 6, eyeY, 5, 4, '#FFFFFF');
+                drawPixelRect(x + 1, eyeY, 5, 4, '#FFFFFF');
+                drawPixelRect(x - 5, eyeY + 1, 3, 2, '#663300');
+                drawPixelRect(x + 2, eyeY + 1, 3, 2, '#663300');
+            }
+
+            // Mouth
+            const mouthY = headY + 11;
+            if (isHollow) {
+                // Mask teeth
+                drawPixelRect(x - 4, mouthY, 8, 3, '#111111'); // Mouth line
+                drawPixelRect(x - 3, mouthY, 1, 3, '#FFFFFF');
+                drawPixelRect(x - 1, mouthY, 1, 3, '#FFFFFF');
+                drawPixelRect(x + 1, mouthY, 1, 3, '#FFFFFF');
+                drawPixelRect(x + 3, mouthY, 1, 3, '#FFFFFF');
+            } else {
+                // Normal scowl
+                drawPixelRect(x - 2, mouthY + 1, 4, 1, '#CC8866');
+            }
+        }
+
+        function drawVegeta(x, y, s, flip, fighter) {
+            const isSSJ = fighter && fighter.isTransformed;
+            const hairColor = isSSJ ? '#FFD700' : '#111111';
+            const state = fighter ? fighter.state : 'idle';
+            const stateTimer = fighter ? fighter.stateTimer : 0;
+
+            // Animation
+            const breathe = Math.sin(frameCount * 0.1) * 1;
+            const walkCycle = Math.sin(frameCount * 0.25) * 4;
+
+            // Dynamic pose
+            let armOffset = 0, legOffset = 0, bodyTilt = 0;
+
+            if (state === 'walk') {
+                legOffset = walkCycle;
+                armOffset = walkCycle;
+            } else if (state === 'punch') {
+                armOffset = stateTimer > 8 ? 12 : 0;
+                bodyTilt = 2;
+            } else if (state === 'kick') {
+                legOffset = stateTimer > 8 ? 14 : 0;
+                bodyTilt = -2;
+            } else if (state === 'special') {
+                // Galick Gun / Big Bang Attack Charge
+                // Floating slightly?
+                bodyTilt = -5; // Leaning back
+                armOffset = -10; // Hands pulled back
+
+                // Energy gathering
+                if (Math.random() > 0.5) {
+                    const gx = x + (Math.random() - 0.5) * 40;
+                    const gy = y + (Math.random() - 0.5) * 40;
+                    drawPixelRect(gx, gy, 2, 2, isSSJ ? '#FFFF00' : '#AA00FF'); // Yellow or Purple sparks
+                }
+            }
+
+            // --- BOOTS ---
+            const legY = y - 22;
+            // Boots (White with yellow tips)
+            drawPixelRect(x - 10, legY + legOffset * 0.5, 9, 12, '#EEEEEE');
+            drawPixelRect(x - 10, legY + legOffset * 0.5 + 4, 9, 3, '#DDAA00'); // Tip/Design
+            drawPixelRect(x + 2, legY - legOffset * 0.5, 9, 12, '#EEEEEE');
+            drawPixelRect(x + 2, legY - legOffset * 0.5 + 4, 9, 3, '#DDAA00');
+
+            // Legs (Blue Suit)
+            drawPixelRect(x - 9, legY - 10, 8, 10, '#113399');
+            drawPixelRect(x + 2, legY - 10, 8, 10, '#113399');
+
+            // --- BODY (Saiyan Armor) ---
+            const bodyY = y - 44 + breathe + bodyTilt;
+
+            // Blue undersuit
+            drawPixelRect(x - 12, bodyY, 24, 22, '#113399');
+
+            // Chest Armor (White)
+            drawPixelRect(x - 13, bodyY, 26, 14, '#EEEEEE');
+            // Armor straps/segments (Yellow/Gold)
+            drawPixelRect(x - 8, bodyY + 2, 16, 10, '#DDAA00'); // Center plate
+            drawPixelRect(x - 10, bodyY + 4, 20, 2, '#B8860B'); // Detail line
+            drawPixelRect(x - 10, bodyY + 8, 20, 2, '#B8860B'); // Detail line
+
+            // Shoulders (Armor pads - iconic)
+            drawPixelRect(x - 18, bodyY - 2, 8, 5, '#DDAA00'); // Left pad base
+            drawPixelRect(x - 18, bodyY - 2, 2, 14, '#EEEEEE'); // Left pad edge
+            drawPixelRect(x + 11, bodyY - 2, 8, 5, '#DDAA00'); // Right pad base
+            drawPixelRect(x + 17, bodyY - 2, 2, 14, '#EEEEEE'); // Right pad edge
+
+            // --- ARMS ---
+            const armY = y - 42 + breathe;
+
+            // Blue sleeves
+            drawPixelRect(x - 16 - armOffset, armY, 6, 14, '#113399');
+            drawPixelRect(x + 11 + armOffset, armY, 6, 14, '#113399');
+
+            // Gloves (White)
+            drawPixelRect(x - 16 - armOffset, armY + 14, 6, 6, '#EEEEEE');
+            drawPixelRect(x + 11 + armOffset, armY + 14, 6, 6, '#EEEEEE');
+            // Glove cuffs
+            drawPixelRect(x - 16 - armOffset, armY + 14, 6, 2, '#CCCCCC');
+            drawPixelRect(x + 11 + armOffset, armY + 14, 6, 2, '#CCCCCC');
+
+            // Hands
+            if (state === 'special') {
+                // Charging - hands glowing
+                drawPixelRect(x - 16 - armOffset, armY + 20, 6, 6, isSSJ ? '#FFFF88' : '#DDAAFF'); // Glowing
+                drawPixelRect(x + 11 + armOffset, armY + 20, 6, 6, isSSJ ? '#FFFF88' : '#DDAAFF');
+            } else {
+                drawPixelRect(x - 16 - armOffset, armY + 20, 6, 4, '#FFCC99');
+                drawPixelRect(x + 11 + armOffset, armY + 20, 6, 4, '#FFCC99');
+            }
+
+            // --- HEAD ---
+            const headY = y - 60 + breathe;
+            // Neck
+            drawPixelRect(x - 3, headY + 12, 6, 4, '#FFCC99');
+
+            // Face
+            drawPixelRect(x - 9, headY, 18, 14, '#FFCC99');
+            // Cheek contour (sharp features)
+            drawPixelRect(x - 9, headY + 8, 2, 6, '#DDAA77');
+            drawPixelRect(x + 6, headY + 8, 2, 6, '#DDAA77');
+
+            // Hair (Flame-like)
+            const hColor = isSSJ ? '#FFFF00' : '#111111';
+            const hShade = isSSJ ? '#FFD700' : '#000000';
+
+            // Main tall hair mass
+            drawPixelRect(x - 10, headY - 14, 20, 14, hColor);
+            drawPixelRect(x - 6, headY - 20, 12, 20, hColor); // Peak
+            // Spikes
+            drawPixelRect(x - 8, headY - 18, 4, 8, hColor);
+            drawPixelRect(x + 4, headY - 18, 4, 8, hColor);
+
+            // Widow's peak (Forehead)
+            drawPixelRect(x - 2, headY, 5, 4, hColor);
+
+            // Eyes (Angry/Serious)
+            const eyeY = headY + 6;
+            if (isSSJ) {
+                // SSJ Eyes (Green/Blue)
+                drawPixelRect(x - 6, eyeY, 5, 4, '#FFFFFF');
+                drawPixelRect(x + 1, eyeY, 5, 4, '#FFFFFF');
+                drawPixelRect(x - 5, eyeY + 1, 3, 2, '#00FFFF');
+                drawPixelRect(x + 2, eyeY + 1, 3, 2, '#00FFFF');
+                // Golden eyebrows
+                drawPixelRect(x - 7, eyeY - 2, 6, 2, '#DDAA00'); // Left brow
+                drawPixelRect(x + 1, eyeY - 2, 6, 2, '#DDAA00'); // Right brow
+            } else {
+                // Normal Eyes (Black)
+                drawPixelRect(x - 6, eyeY, 5, 4, '#FFFFFF');
+                drawPixelRect(x + 1, eyeY, 5, 4, '#FFFFFF');
+                drawPixelRect(x - 5, eyeY + 1, 3, 2, '#111111');
+                drawPixelRect(x + 2, eyeY + 1, 3, 2, '#111111');
+                // Black eyebrows
+                drawPixelRect(x - 7, eyeY - 2, 6, 2, '#111111');
+                drawPixelRect(x + 1, eyeY - 2, 6, 2, '#111111');
+            }
+
+            // Scowl / Mouth
+            drawPixelRect(x - 2, headY + 12, 4, 1, '#CC8866');
+
+            // SSJ AURA (Sparks)
+            if (isSSJ && Math.random() > 0.8) {
+                const sx = x + (Math.random() - 0.5) * 50;
+                const sy = y - Math.random() * 70;
+                drawPixelRect(sx, sy, 2, 8, '#FFFF88'); // Lightning/Static
+            }
+        }
+
+        function drawZoro(x, y, s, flip, fighter) {
+            const isBandana = fighter && fighter.isTransformed;
+            const state = fighter ? fighter.state : 'idle';
+            const stateTimer = fighter ? fighter.stateTimer : 0;
+
+            // Animation
+            const breathe = Math.sin(frameCount * 0.1) * 1;
+            const walkCycle = Math.sin(frameCount * 0.25) * 4;
+
+            // Dynamic pose
+            let armOffset = 0, legOffset = 0, bodyTilt = 0;
+            let headTilt = 0;
+
+            // Santoryu logic
+            let mouthSwordAngle = 0;
+            let leftSwordAngle = Math.PI / 2; // Default sheathed/held down
+            let rightSwordAngle = Math.PI / 2;
+            let holdSwords = false;
+
+            if (state === 'walk') {
+                legOffset = walkCycle;
+                armOffset = walkCycle;
+            } else if (state === 'punch') {
+                // Oni Giri (Cross slash)
+                holdSwords = true;
+                mouthSwordAngle = 0;
+                leftSwordAngle = 0; // Horizontal
+                rightSwordAngle = Math.PI; // Horizontal opposite
+                armOffset = 10;
+                bodyTilt = 10; // Lean forward
+            } else if (state === 'kick') {
+                // Tatsumaki (Spin)
+                holdSwords = true;
+                bodyTilt = 0;
+                // Spin effect simulated by rapid angle change if possible, or just static pose
+                leftSwordAngle = -Math.PI / 4;
+                rightSwordAngle = -Math.PI * 0.75;
+            } else if (state === 'special') {
+                // Phoenix Cannon / Asura
+                holdSwords = true;
+                bodyTilt = 5;
+                if (Math.random() > 0.5 && isBandana) {
+                    // Asura Aura (Purple/Dark)
+                    const ax = x + (Math.random() - 0.5) * 50;
+                    const ay = y + (Math.random() - 0.5) * 50;
+                    drawPixelRect(ax, ay, 2, 8, '#440088');
+                }
+            }
+
+            // --- LEGS ---
+            const legY = y - 22;
+            // Green Pants / Boots
+            drawPixelRect(x - 9, legY + legOffset * 0.5, 8, 14, '#222222'); // Black trousers
+            drawPixelRect(x + 2, legY - legOffset * 0.5, 8, 14, '#222222');
+            // Boots
+            drawPixelRect(x - 10, legY + 10 + legOffset * 0.5, 9, 6, '#111111');
+            drawPixelRect(x + 1, legY + 10 - legOffset * 0.5, 9, 6, '#111111');
+
+            // --- BODY (Green Robe) ---
+            const bodyY = y - 44 + breathe + bodyTilt;
+
+            // Green Robe (Kimono style)
+            drawPixelRect(x - 11, bodyY, 22, 24, '#228B22');
+            // Open Chest
+            drawPixelRect(x - 4, bodyY + 1, 8, 12, '#FFCC99');
+            // Chest Scar (Huge diagonal)
+            drawPixelRect(x - 3, bodyY + 2, 6, 10, '#CC8888');
+            drawPixelRect(x - 2, bodyY + 3, 4, 8, '#AA6666'); // Deep scar
+
+            // Red Sash (Haramaki)
+            drawPixelRect(x - 11, bodyY + 16, 22, 6, '#CC0000');
+            // Three Swords Belt
+            drawPixelRect(x + 8, bodyY + 14, 6, 8, '#CCAA00'); // Scabbard holder
+
+            // --- SWORDS (Scabbards on hip) ---
+            if (!holdSwords) {
+                // 3 Scabbards on right hip
+                for (let i = 0; i < 3; i++) {
+                    drawPixelRect(x + 10 + i * 2, bodyY + 10 + i * 2, 4, 25, i === 0 ? '#FFFFFF' : i === 1 ? '#880000' : '#333333'); // Wado, Kitetsu, Shusui colors roughly
+                }
+            }
+
+            // --- ARMS ---
+            const armY = y - 42 + breathe;
+
+            // Left Arm
+            drawPixelRect(x - 16 - armOffset, armY, 6, 14, '#FFCC99'); // Skin
+            // Wrist band
+            drawPixelRect(x - 16 - armOffset, armY + 12, 6, 3, '#111111');
+
+            // Right Arm
+            let rArmX = x + 11 + armOffset;
+            drawPixelRect(rArmX - 2, armY, 6, 14, '#FFCC99');
+
+            if (holdSwords) {
+                // Draw Hand Swords
+                // Left Hand holding sword
+                drawPixelRect(x - 16 - armOffset, armY + 14, 5, 5, '#FFCC99');
+                // Right Hand holding sword
+                drawPixelRect(rArmX - 2, armY + 14, 5, 5, '#FFCC99');
+
+                // Draw Swords (Simplified lines)
+                ctx.save();
+
+                // Left Sword
+                ctx.translate(x - 14 - armOffset, armY + 16);
+                ctx.rotate(leftSwordAngle * (flip ? -1 : 1));
+                ctx.fillStyle = '#DDDDDD'; ctx.fillRect(0, -30, 3, 35); // Blade
+                ctx.fillStyle = '#111111'; ctx.fillRect(0, 0, 4, 8); // Hilt
+                ctx.restore();
+
+                // Right Sword
+                ctx.save();
+                ctx.translate(rArmX, armY + 16);
+                ctx.rotate(rightSwordAngle * (flip ? -1 : 1));
+                ctx.fillStyle = '#DDDDDD'; ctx.fillRect(0, -30, 3, 35); // Blade
+                ctx.fillStyle = '#880000'; ctx.fillRect(0, 0, 4, 8); // Hilt
+                ctx.restore();
+            } else {
+                drawPixelRect(x - 16 - armOffset, armY + 14, 5, 5, '#FFCC99');
+                drawPixelRect(rArmX - 2, armY + 14, 5, 5, '#FFCC99');
+            }
+
+            // --- HEAD ---
+            const headY = y - 60 + breathe;
+            // Neck
+            drawPixelRect(x - 3, headY + 12, 6, 6, '#FFCC99');
+
+            // Face
+            drawPixelRect(x - 8, headY, 16, 14, '#FFCC99');
+
+            // Hair / Bandana
+            if (isBandana) {
+                // Black Bandana tied
+                drawPixelRect(x - 9, headY - 2, 18, 6, '#111111');
+                drawPixelRect(x - 10, headY, 2, 6, '#111111'); // Knot left
+                drawPixelRect(x + 8, headY, 2, 6, '#111111'); // Knot right
+            } else {
+                // Green Moss Head
+                drawPixelRect(x - 9, headY - 4, 18, 8, '#228B22');
+                drawPixelRect(x - 8, headY - 6, 16, 4, '#228B22'); // Spiky top
+            }
+
+            // Eyes
+            const eyeY = headY + 5;
+            if (isBandana) {
+                // Serious Combat Mode
+                drawPixelRect(x - 5, eyeY, 4, 3, '#FFFFFF');
+                drawPixelRect(x - 4, eyeY + 1, 2, 2, '#000000');
+                // Left eye closed (Scar)
+                drawPixelRect(x + 2, eyeY, 4, 1, '#111111'); // Closed line
+                drawPixelRect(x + 3, eyeY - 4, 1, 10, '#CC8888'); // Scar vertical
+
+                // Red Glint effect
+                if (Math.random() < 0.1) {
+                    drawPixelRect(x - 4, eyeY + 1, 2, 2, '#FF0000');
+                }
+            } else {
+                // Normal
+                drawPixelRect(x - 5, eyeY, 4, 3, '#FFFFFF');
+                drawPixelRect(x - 4, eyeY + 1, 2, 2, '#000000');
+                drawPixelRect(x + 2, eyeY, 4, 3, '#FFFFFF');
+                drawPixelRect(x + 3, eyeY + 1, 2, 2, '#000000');
+            }
+
+            // Mouth Sword (Wado Ichimonji)
+            if (holdSwords) {
+                // Holding sword in mouth
+                ctx.save();
+                ctx.translate(x, headY + 12);
+                ctx.rotate(mouthSwordAngle * (flip ? -1 : 1));
+                ctx.fillStyle = '#FFFFFF'; ctx.fillRect(-15, -2, 35, 4); // Hilt + Blade
+                ctx.fillStyle = '#DDDDDD'; ctx.fillRect(-15, -2, 25, 4); // Blade part
+                ctx.fillStyle = '#EEEEEE'; ctx.fillRect(10, -2, 10, 4); // Hilt in mouth
+                ctx.restore();
+            } else {
+                // Grin
+                drawPixelRect(x - 2, headY + 11, 4, 1, '#CC8866');
+            }
+
+            // Earrings
+            drawPixelRect(x - 9, headY + 8, 1, 3, '#FFD700');
+        }
+
+        function drawSaitama(x, y, s, flip, fighter) {
+            const isSerious = fighter && fighter.isTransformed;
+            const state = fighter ? fighter.state : 'idle';
+            const stateTimer = fighter ? fighter.stateTimer : 0;
+
+            // Animation
+            const breathe = Math.sin(frameCount * 0.1) * 1;
+            const walkCycle = Math.sin(frameCount * 0.25) * 4;
+            const capeFlow = Math.sin(frameCount * 0.2) * 5;
+
+            // Dynamic pose
+            let armOffset = 0, legOffset = 0, bodyTilt = 0;
+
+            if (state === 'walk') {
+                legOffset = walkCycle;
+                armOffset = walkCycle;
+            } else if (state === 'punch') {
+                // Normal Punch / Serious Punch
+                armOffset = stateTimer > 8 ? 20 : -5;
+                bodyTilt = 5;
+            } else if (state === 'kick') {
+                legOffset = stateTimer > 8 ? 14 : 0;
+                bodyTilt = -2;
+            } else if (state === 'special') {
+                // Death Punch charge
+                bodyTilt = 2;
+                if (Math.random() > 0.5 && isSerious) {
+                    // Death Kanji or ominous aura
+                    const ax = x + (Math.random() - 0.5) * 60;
+                    const ay = y + (Math.random() - 0.5) * 60;
+                    drawPixelRect(ax, ay, 4, 4, '#FF0000');
+                }
+            }
+
+            // --- CAPE (Back) ---
+            // White Cape flowing
+            drawPixelRect(x - 14 + capeFlow, y - 44, 28, 35, '#FFFFFF');
+            drawPixelRect(x - 14 + capeFlow, y - 44, 4, 35, '#DDDDDD'); // Fold shadow
+
+            // --- LEGS ---
+            const legY = y - 22;
+            // Red Boots
+            drawPixelRect(x - 10, legY + 12 + legOffset * 0.5, 9, 8, '#CC0000');
+            drawPixelRect(x + 1, legY + 12 - legOffset * 0.5, 9, 8, '#CC0000');
+
+            // Yellow Legs
+            drawPixelRect(x - 9, legY + legOffset * 0.5, 8, 12, '#FFDD00');
+            drawPixelRect(x + 2, legY - legOffset * 0.5, 8, 12, '#FFDD00');
+
+            // --- BODY (Yellow Suit) ---
+            const bodyY = y - 44 + breathe + bodyTilt;
+
+            // Yellow Bodysuit
+            drawPixelRect(x - 11, bodyY, 22, 22, '#FFDD00');
+            // Zipper
+            drawPixelRect(x - 1, bodyY + 2, 2, 14, '#DDDDDD');
+            drawPixelRect(x - 2, bodyY + 2, 1, 14, '#CCAA00'); // Shadow
+
+            // Belt
+            drawPixelRect(x - 11, bodyY + 18, 22, 4, '#111111');
+            drawPixelRect(x - 3, bodyY + 18, 6, 4, '#FFD700'); // Gold Buckle
+
+            // --- ARMS ---
+            const armY = y - 42 + breathe;
+
+            // Yellow Sleeves
+            drawPixelRect(x - 16 - armOffset, armY, 6, 10, '#FFDD00');
+            drawPixelRect(x + 10 + armOffset, armY, 6, 10, '#FFDD00');
+
+            // Red Gloves
+            drawPixelRect(x - 17 - armOffset, armY + 10, 8, 10, '#CC0000');
+            drawPixelRect(x + 9 + armOffset, armY + 10, 8, 10, '#CC0000');
+
+            // --- HEAD ---
+            const headY = y - 60 + breathe;
+            // Neck
+            drawPixelRect(x - 3, headY + 12, 6, 6, '#FFCC99');
+
+            // Bald Head
+            drawPixelRect(x - 9, headY, 18, 14, '#FFCC99');
+            // Shine highlight
+            drawPixelRect(x - 4, headY + 1, 4, 3, '#FFFFFF');
+            drawPixelRect(x + 2, headY + 2, 2, 2, '#FFFFFF');
+
+            // Face
+            const eyeY = headY + 6;
+
+            if (isSerious) {
+                // SERIOUS FACE (Shadowed)
+                drawPixelRect(x - 9, headY, 18, 8, 'rgba(0, 0, 0, 0.3)'); // Shadow
+
+                // Sharp Eyes
+                drawPixelRect(x - 6, eyeY, 5, 2, '#FFFFFF');
+                drawPixelRect(x + 1, eyeY, 5, 2, '#FFFFFF');
+                drawPixelRect(x - 4, eyeY + 1, 2, 1, '#000000');
+                drawPixelRect(x + 2, eyeY + 1, 2, 1, '#000000');
+
+                // Serious Mouth
+                drawPixelRect(x - 2, headY + 12, 4, 1, '#111111');
+            } else {
+                // OK FACE (Derp)
+                // Oval eyes
+                drawPixelRect(x - 6, eyeY, 4, 5, '#FFFFFF');
+                drawPixelRect(x + 2, eyeY, 4, 5, '#FFFFFF');
+                drawPixelRect(x - 5, eyeY + 2, 2, 2, '#000000'); // Dot pupil
+                drawPixelRect(x + 3, eyeY + 2, 2, 2, '#000000');
+
+                // Blank expression mouth
+                drawPixelRect(x - 2, headY + 12, 4, 1, '#AA8877');
+            }
+
+            // Cape connection
+            drawPixelRect(x - 8, bodyY, 4, 2, '#FFFFFF'); // Button
+            drawPixelRect(x + 4, bodyY, 4, 2, '#FFFFFF'); // Button
+        }
+
+        function drawGojo(x, y, s, flip, fighter) {
+            const isUnmasked = fighter && fighter.isTransformed;
+            const eyeColor = '#33CCFF'; // Six Eyes Blue
+            const state = fighter ? fighter.state : 'idle';
+            const stateTimer = fighter ? fighter.stateTimer : 0;
+
+            // Animation
+            const breathe = Math.sin(frameCount * 0.1) * 1;
+            const walkCycle = Math.sin(frameCount * 0.25) * 4;
+
+            // Dynamic pose
+            let armOffset = 0, legOffset = 0, bodyTilt = 0;
+
+            if (state === 'walk') {
+                legOffset = walkCycle;
+                armOffset = walkCycle;
+            } else if (state === 'punch') {
+                armOffset = stateTimer > 8 ? 15 : -5;
+                bodyTilt = 5;
+            } else if (state === 'kick') {
+                legOffset = stateTimer > 8 ? 14 : 0;
+                bodyTilt = -2;
+            } else if (state === 'special') {
+                // Hollow Purple / Red / Blue
+                bodyTilt = -2;
+                // Levitate
+                y -= Math.sin(frameCount * 0.1) * 5;
+
+                if (Math.random() > 0.5) {
+                    // Infinity Particles
+                    const px = x + (Math.random() - 0.5) * 60;
+                    const py = y + (Math.random() - 0.5) * 60;
+                    const color = Math.random() > 0.5 ? '#FF0000' : '#0000FF'; // Red or Blue
+                    drawPixelRect(px, py, 2, 2, color);
+                }
+            }
+
+            // --- INFINITY BARRIER (Passive) ---
+            if (state !== 'hit' && Math.random() < 0.05) {
+                ctx.strokeStyle = 'rgba(255, 255, 255, 0.5)';
+                ctx.lineWidth = 1;
+                ctx.beginPath();
+                ctx.arc(x, y - 30, 40, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            // --- LEGS ---
+            const legY = y - 24;
+            // Black Pants (Long)
+            drawPixelRect(x - 9, legY + legOffset * 0.5, 8, 18, '#050505');
+            drawPixelRect(x + 1, legY - legOffset * 0.5, 8, 18, '#050505');
+
+            // Shoes (Black)
+            drawPixelRect(x - 10, legY + 18 + legOffset * 0.5, 9, 6, '#111111');
+            drawPixelRect(x + 2, legY + 18 - legOffset * 0.5, 9, 6, '#111111');
+
+            // --- BODY (Jujutsu Tech Uniform) ---
+            const bodyY = y - 44 + breathe + bodyTilt;
+
+            // High Collar Jacket
+            drawPixelRect(x - 11, bodyY, 22, 20, '#080808');
+            // Texture / highlight
+            drawPixelRect(x - 6, bodyY + 2, 12, 18, '#111111');
+
+            // Zipper line
+            drawPixelRect(x - 1, bodyY + 2, 2, 18, '#222222');
+            // Buttons
+            drawPixelRect(x + 2, bodyY + 4, 3, 3, '#333333'); // Spiral button
+
+            // Neck Area (High Collar)
+            drawPixelRect(x - 10, bodyY - 6, 20, 8, '#080808'); // Collar
+
+            // --- ARMS ---
+            const armY = y - 42 + breathe;
+
+            // Black Sleeves
+            drawPixelRect(x - 16 - armOffset, armY, 6, 16, '#080808');
+            drawPixelRect(x + 10 + armOffset, armY, 6, 16, '#080808');
+
+            // Hands
+            if (state === 'special') {
+                // Hand signs (Mudra)
+                drawPixelRect(x - 8, armY + 12, 6, 6, '#FFCC99'); // Hands together
+                drawPixelRect(x + 2, armY + 12, 6, 6, '#FFCC99');
+
+                // Purple Ball
+                if (frameCount % 10 < 5) {
+                    drawPixelRect(x - 4, armY + 10, 8, 8, '#8800FF'); // Hollow Purple center
+                    drawPixelRect(x - 6, armY + 8, 12, 12, 'rgba(136, 0, 255, 0.3)'); // Aura
+                }
+            } else {
+                drawPixelRect(x - 16 - armOffset, armY + 16, 5, 5, '#FFCC99');
+                drawPixelRect(x + 10 + armOffset, armY + 16, 5, 5, '#FFCC99');
+            }
+
+            // --- HEAD ---
+            const headY = y - 60 + breathe;
+            // Neck
+            drawPixelRect(x - 3, headY + 12, 6, 6, '#FFCC99'); // Exposed neck
+
+            // Face
+            drawPixelRect(x - 8, headY, 16, 14, '#FFCC99');
+
+            // Hair
+            if (isUnmasked) {
+                // Hair down / loose (White)
+                drawPixelRect(x - 10, headY - 2, 20, 10, '#FFFFFF');
+                drawPixelRect(x - 11, headY + 2, 3, 8, '#FFFFFF'); // Bangs side
+                drawPixelRect(x + 8, headY + 2, 3, 8, '#FFFFFF');
+                drawPixelRect(x - 4, headY - 1, 8, 4, '#FFFFFF'); // Bangs center
+            } else {
+                // Hair Up (Spiky White)
+                drawPixelRect(x - 10, headY - 6, 20, 10, '#FFFFFF');
+                drawPixelRect(x - 8, headY - 10, 6, 6, '#FFFFFF');
+                drawPixelRect(x + 2, headY - 10, 6, 6, '#FFFFFF');
+            }
+
+            // Eyes
+            const eyeY = headY + 5;
+
+            // Blindfold / Six Eyes
+            if (isUnmasked) {
+                // GLOWING BLUE SIX EYES
+                drawPixelRect(x - 6, eyeY, 5, 3, '#FFFFFF');
+                drawPixelRect(x + 1, eyeY, 5, 3, '#FFFFFF');
+
+                // Iris
+                drawPixelRect(x - 5, eyeY + 1, 3, 2, eyeColor);
+                drawPixelRect(x + 2, eyeY + 1, 3, 2, eyeColor);
+
+                // Pupil (White/Light blue center for "Universe" look)
+                drawPixelRect(x - 4, eyeY + 1, 1, 1, '#FFFFFF');
+                drawPixelRect(x + 3, eyeY + 1, 1, 1, '#FFFFFF');
+
+                // Sparkle
+                if (Math.random() < 0.2) {
+                    drawPixelRect(x - 8, eyeY - 2, 20, 1, 'rgba(51, 204, 255, 0.5)'); // Eye flare
+                }
+
+                // Smug Smile
+                drawPixelRect(x - 3, headY + 11, 6, 1, '#CC8866');
+                drawPixelRect(x - 3, headY + 10, 2, 1, '#CC8866'); // Smirk
+            } else {
+                // Black Blindfold
+                drawPixelRect(x - 9, eyeY - 2, 18, 6, '#080808');
+                drawPixelRect(x - 8, eyeY - 1, 16, 2, '#222222'); // Fold/Highlight
+
+                // Neutral Mouth
+                drawPixelRect(x - 2, headY + 12, 4, 1, '#CC8866');
+            }
+        }
+
+        // === AI ===
+        class AI {
+            constructor(fighter) {
+                this.fighter = fighter;
+                this.actionTimer = 0;
+                this.reactionTimer = 0;
+                this.difficulty = 0.8; // High difficulty
+                this.targetDist = 100;
+                this.state = 'neutral'; // neutral, attack, defend, retreat
+                this.comboCount = 0;
+            }
+
+            update(opponent) {
+                this.actionTimer--;
+                this.reactionTimer--;
+
+                // If stunned or cooling down, do nothing
+                if (this.fighter.hitStun > 0 || this.fighter.state === 'special' || this.fighter.state === 'ultimate') {
+                    this.comboCount = 0;
+                    return;
+                }
+
+                if (this.actionTimer > 0) return;
+
+                const dist = Math.abs(this.fighter.x - opponent.x);
+                const facing = this.fighter.x < opponent.x ? 1 : -1;
+                const opponentAttacking = (opponent.state === 'punch' || opponent.state === 'kick' || opponent.state === 'special' || opponent.state === 'ultimate');
+
+                // --- REACTIVE DEFENSE ---
+                // If opponent is attacking and close, chance to block or dodge
+                if (opponentAttacking && dist < 120 && this.reactionTimer <= 0) {
+                    if (Math.random() < this.difficulty) {
+                        if (Math.random() < 0.6) {
+                            // Block
+                            this.fighter.blocking = true;
+                            this.actionTimer = 20;
+                            this.reactionTimer = 40;
+                            setTimeout(() => this.fighter.blocking = false, 500);
+                            return;
+                        } else {
+                            // Dodge / Jump back
+                            this.fighter.vx = -facing * this.fighter.speed * 1.5;
+                            this.fighter.jump();
+                            this.actionTimer = 30;
+                            this.reactionTimer = 60;
+                            return;
+                        }
+                    }
+                }
+
+                // --- TRANSFORMATION ---
+                // If low health or high energy, transform
+                if (!this.fighter.isTransformed && this.fighter.energy >= 200 && Math.random() < 0.05) {
+                    this.fighter.transform();
+                    this.actionTimer = 60;
+                    return;
+                }
+
+                // --- OFFENSE & MOVEMENT ---
+
+                // Combo logic
+                if (this.comboCount > 0) {
+                    // Continue combo
+                    if (dist < 80) {
+                        if (this.comboCount === 1) this.fighter.kick();
+                        else if (this.comboCount === 2) this.fighter.punch();
+                        else if (this.comboCount === 3 && this.fighter.energy >= 50) this.fighter.special();
+
+                        this.comboCount++;
+                        if (this.comboCount > 3) this.comboCount = 0;
+                        this.actionTimer = 20;
+                        return;
+                    } else {
+                        // Chase for combo
+                        this.fighter.vx = facing * this.fighter.speed;
+                        this.fighter.state = 'walk';
+                        this.actionTimer = 5;
+                        return;
+                    }
+                }
+
+                // Neutral game
+                if (dist < 60) {
+                    // Close range
+                    const rand = Math.random();
+                    if (rand < 0.4) {
+                        this.fighter.punch();
+                        this.comboCount = 1; // Start combo
+                        this.actionTimer = 15;
+                    } else if (rand < 0.7) {
+                        this.fighter.kick();
+                        this.actionTimer = 20;
+                    } else if (rand < 0.8 && this.fighter.energy >= 100) {
+                        this.fighter.ultimate(); // Surprise ult
+                        this.actionTimer = 60;
+                    } else {
+                        // Create space/Block
+                        this.fighter.blocking = true;
+                        this.actionTimer = 20;
+                        setTimeout(() => this.fighter.blocking = false, 300);
+                    }
+                } else if (dist < 250) {
+                    // Mid range
+                    const rand = Math.random();
+                    if (rand < 0.6) {
+                        // Approach
+                        this.fighter.vx = facing * this.fighter.speed;
+                        this.fighter.state = 'walk';
+                        this.actionTimer = 10;
+                    } else if (rand < 0.7 && this.fighter.energy >= 50) {
+                        this.fighter.special(); // Projectile/Dash
+                        this.actionTimer = 40;
+                    } else if (rand < 0.85) {
+                        // Jump approach
+                        this.fighter.jump();
+                        this.fighter.vx = facing * this.fighter.speed;
+                        this.actionTimer = 20;
+                    } else {
+                        // Idle/Wait
+                        this.fighter.state = 'idle';
+                        this.actionTimer = 15;
+                    }
+                } else {
+                    // Far range
+                    const rand = Math.random();
+                    if (rand < 0.7) {
+                        // Close distance
+                        this.fighter.vx = facing * this.fighter.speed;
+                        this.fighter.state = 'walk';
+                        this.actionTimer = 10;
+                    } else if (rand < 0.9 && this.fighter.energy >= 50) {
+                        this.fighter.special(); // Long range attack
+                        this.actionTimer = 40;
+                    } else {
+                        // Charge energy (if game had mechanics, for now just wait)
+                        this.fighter.state = 'idle';
+                        this.actionTimer = 20;
+                    }
+                }
+            }
+        }
+
+        let player1, player2, ai;
+
+        // === INPUT ===
+        const keys = {};
+        window.addEventListener('keydown', e => {
+            keys[e.code] = true;
+            e.preventDefault();
+
+            const isEnter = e.code === 'Enter' || e.code === 'Space' || e.key === 'Enter' || e.key === ' ';
+            const isLeft = e.code === 'ArrowLeft' || e.code === 'KeyA';
+            const isRight = e.code === 'ArrowRight' || e.code === 'KeyD';
+            const isUp = e.code === 'ArrowUp' || e.code === 'KeyW';
+            const isDown = e.code === 'ArrowDown' || e.code === 'KeyS';
+            const isEsc = e.code === 'Escape' || e.key === 'Escape';
+
+            if (gameState === 'menu') {
+                if (isUp) {
+                    menuSelection = 0; // Arcade
+                    // playSound('select');
+                }
+                if (isDown) {
+                    menuSelection = 1; // Training
+                    // playSound('select');
+                }
+                if (isEnter) {
+                    gameState = 'select';
+                    selectPhase = 1;
+                    selectCursor = 0;
+                    gameMode = menuSelection === 1 ? 'training' : 'vs';
+                }
+            } else if (gameState === 'select') {
+                if (isLeft) selectCursor = (selectCursor - 1 + characters.length) % characters.length;
+                if (isRight) selectCursor = (selectCursor + 1) % characters.length;
+                if (isUp) selectCursor = (selectCursor - 4 + characters.length) % characters.length;
+                if (isDown) selectCursor = (selectCursor + 4) % characters.length;
+                if (isEnter) {
+                    if (selectPhase === 1) {
+                        selectedP1 = selectCursor;
+                        selectPhase = 2;
+                        selectCursor = 0;
+                    } else {
+                        selectedP2 = selectCursor;
+                        startFight();
+                    }
+                }
+                if (isEsc) {
+                    if (selectPhase === 2) selectPhase = 1;
+                    else gameState = 'menu';
+                }
+            } else if (gameState === 'victory') {
+                if (isEnter) {
+                    gameState = 'select';
+                    selectPhase = 1;
+                    selectCursor = 0;
+                }
+            }
+        });
+        window.addEventListener('keyup', e => {
+            keys[e.code] = false;
+        });
+
+        function startFight() {
+            gameState = 'fight';
+            player1 = new Fighter(selectedP1, 200, false);
+            player2 = new Fighter(selectedP2, 800, true);
+            ai = new AI(player2);
+            particles = [];
+            projectiles = [];
+            hitSparks = [];
+            comboText = [];
+            roundTimer = 99;
+            timerCounter = 0;
+            pauseTimer = 90;
+            shakeAmount = 0;
+            roundWinner = '';
+
+            // Random Arena
+            currentArena = arenas[Math.floor(Math.random() * arenas.length)];
+            initWeather();
+        }
+
+        // === COLLISION ===
+        function checkHit(attacker, defender) {
+            if (!attacker.attackBox) return;
+            const a = attacker.attackBox;
+            const dx = Math.abs(a.x - defender.x);
+            const dy = Math.abs(a.y - (defender.y - 30));
+            if (dx < (a.w + defender.width) / 2 && dy < (a.h + defender.height) / 2) {
+                const dir = attacker.x < defender.x ? 1 : -1;
+                const dmg = a.damage * (1 - defender.def / 300);
+                defender.takeDamage(dmg, a.knockback, dir);
+                attacker.attackBox = null;
+
+                // Gain energy on hit
+                attacker.energy += 10;
+                if (attacker.energy > attacker.maxEnergy) attacker.energy = attacker.maxEnergy;
+
+                if (a.type === 'ultimate') {
+                    slowMotion = 15;
+                    shakeAmount = 12;
+                    // Big impact
+                    for (let i = 0; i < 30; i++) {
+                        hitSparks.push({
+                            x: defender.x,
+                            y: defender.y - 25,
+                            vx: (Math.random() - 0.5) * 20,
+                            vy: (Math.random() - 0.5) * 20,
+                            life: 25,
+                            color: ['#FFFFFF', '#FFFF00', '#FF8800', characters[attacker.charIndex].specialColor][Math.floor(Math.random() * 4)]
+                        });
+                    }
+                }
+
+                if (defender.combo > 1) {
+                    comboText.push({
+                        x: defender.x,
+                        y: defender.y - 80,
+                        text: defender.combo + ' HIT!',
+                        life: 40,
+                        color: '#FFDD00'
+                    });
+                }
+            }
+        }
+
+        // === DRAWING HELPERS ===
+        function drawBackground() {
+            if (currentArena && currentArena.draw) {
+                currentArena.draw();
+            }
+        }
+
+        function drawHUD() {
+            // P1 Health
+            const hpWidth = 350;
+            const hpHeight = 25;
+            // P1
+            ctx.fillStyle = '#330000';
+            ctx.fillRect(30, 20, hpWidth, hpHeight);
+            const p1Ratio = player1.hp / player1.maxHp;
+            const p1Color = p1Ratio > 0.5 ? '#00CC44' : p1Ratio > 0.25 ? '#CCCC00' : '#CC0000';
+            ctx.fillStyle = p1Color;
+            ctx.fillRect(30, 20, hpWidth * p1Ratio, hpHeight);
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(30, 20, hpWidth, hpHeight);
+
+            // P2
+            ctx.fillStyle = '#330000';
+            ctx.fillRect(canvas.width - 30 - hpWidth, 20, hpWidth, hpHeight);
+            const p2Ratio = player2.hp / player2.maxHp;
+            const p2Color = p2Ratio > 0.5 ? '#00CC44' : p2Ratio > 0.25 ? '#CCCC00' : '#CC0000';
+            ctx.fillStyle = p2Color;
+            const p2HpW = hpWidth * p2Ratio;
+            ctx.fillRect(canvas.width - 30 - p2HpW, 20, p2HpW, hpHeight);
+            ctx.strokeStyle = '#FFFFFF';
+            ctx.strokeRect(canvas.width - 30 - hpWidth, 20, hpWidth, hpHeight);
+
+            // Energy bars
+            const eHeight = 10;
+            // P1 Energy
+            ctx.fillStyle = '#001133';
+            ctx.fillRect(30, 50, hpWidth, eHeight);
+            ctx.fillStyle = '#0088FF';
+            ctx.fillRect(30, 50, hpWidth * (player1.energy / player1.maxEnergy), eHeight);
+            ctx.strokeStyle = '#4488CC';
+            ctx.lineWidth = 1;
+            ctx.strokeRect(30, 50, hpWidth, eHeight);
+            if (player1.energy >= 100) {
+                ctx.fillStyle = `rgba(0, 200, 255, ${0.5 + Math.sin(frameCount * 0.2) * 0.3})`;
+                ctx.fillRect(30, 50, hpWidth, eHeight);
+            }
+
+            // P2 Energy
+            ctx.fillStyle = '#001133';
+            ctx.fillRect(canvas.width - 30 - hpWidth, 50, hpWidth, eHeight);
+            ctx.fillStyle = '#0088FF';
+            const p2EW = hpWidth * (player2.energy / player2.maxEnergy);
+            ctx.fillRect(canvas.width - 30 - p2EW, 50, p2EW, eHeight);
+            ctx.strokeStyle = '#4488CC';
+            ctx.strokeRect(canvas.width - 30 - hpWidth, 50, hpWidth, eHeight);
+
+            // Names
+            ctx.fillStyle = '#FFFFFF';
+            ctx.font = '14px "Press Start 2P"';
+            ctx.textAlign = 'left';
+            ctx.fillText(player1.name, 35, 80);
+            ctx.textAlign = 'right';
+            ctx.fillText(player2.name, canvas.width - 35, 80);
+
+            // Timer
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#FFDD00';
+            ctx.font = '28px "Press Start 2P"';
+            ctx.fillText(Math.ceil(roundTimer).toString(), canvas.width / 2, 45);
+
+            // VS
+            ctx.fillStyle = 'rgba(255, 255, 255, 0.3)';
+            ctx.font = '12px "Press Start 2P"';
+            ctx.fillText('VS', canvas.width / 2, 65);
+
+            // Special move names
+            ctx.font = '8px "Press Start 2P"';
+            ctx.fillStyle = '#88AACC';
+            ctx.textAlign = 'left';
+            ctx.fillText('[Q] ' + characters[player1.charIndex].special, 35, 95);
+            ctx.fillText('[E] ULTIMATE', 35, 108);
+
+            // Controls reminder
+            ctx.fillStyle = 'rgba(255,255,255,0.3)';
+            ctx.textAlign = 'center';
+            ctx.fillText('WASD:Move J:Punch K:Kick L:Block Q:Special E:Ultimate T:Transform', canvas.width / 2, canvas.height - 10);
+        }
+
+        // === PARTICLES / EFFECTS ===
+        function updateParticles() {
+            particles = particles.filter(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+
+                if (p.type === 'blood') {
+                    p.vy += 0.5; // Gravity
+                    if (p.y >= 400) {
+                        p.y = 400;
+                        p.vx *= 0.5; // Friction
+                        p.vy = 0;
+                    }
+                } else if (p.type === 'spark') {
+                    p.vx *= 0.9;
+                    p.vy *= 0.9;
+                } else {
+                    p.vy += 0.05; // Default floatey gravity
+                }
+
+                return p.life > 0;
+            });
+
+            hitSparks = hitSparks.filter(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+                return p.life > 0;
+            });
+
+            projectiles = projectiles.filter(p => {
+                p.x += p.vx;
+                p.y += p.vy;
+                p.life--;
+
+                // Check hit
+                const target = p.owner === player1 ? player2 : player1;
+                const dx = Math.abs(p.x - target.x);
+                const dy = Math.abs(p.y - (target.y - 30));
+                if (dx < p.size + 20 && dy < p.size + 30) {
+                    const dir = p.vx > 0 ? 1 : -1;
+                    target.takeDamage(p.damage, 8, dir);
+                    p.life = 0;
+                    shakeAmount = 5;
+                    for (let i = 0; i < 10; i++) {
+                        hitSparks.push({
+                            x: target.x, y: target.y - 25,
+                            vx: (Math.random() - 0.5) * 10,
+                            vy: (Math.random() - 0.5) * 10,
+                            life: 15, color: p.color
+                        });
+                    }
+                }
+
+                return p.life > 0 && p.x > -50 && p.x < canvas.width + 50;
+            });
+
+            comboText = comboText.filter(t => {
+                t.y -= 0.5;
+                t.life--;
+                return t.life > 0;
+            });
+        }
+
+        function drawParticles() {
+            particles.forEach(p => {
+                ctx.globalAlpha = Math.min(1, p.life / 20);
+                ctx.fillStyle = p.color;
+
+                if (p.type === 'blood') {
+                    ctx.fillRect(p.x, p.y, p.size, p.size);
+                } else if (p.type === 'spark') {
+                    ctx.globalAlpha = p.life / 10;
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.beginPath();
+                    ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+                    ctx.fill();
+                } else if (p.type === 'rock') {
+                    ctx.fillStyle = p.color;
+                    ctx.save();
+                    ctx.translate(p.x, p.y);
+                    ctx.rotate(p.life * 0.05); // Rotate as it rises
+                    ctx.fillRect(-p.size / 2, -p.size / 2, p.size, p.size);
+                    // Detail
+                    ctx.fillStyle = '#222';
+                    ctx.fillRect(-p.size / 4, -p.size / 4, p.size / 2, p.size / 2);
+                    ctx.restore();
+                } else {
+                    ctx.fillRect(p.x - p.size / 2, p.y - p.size / 2, p.size, p.size);
+                }
+            });
+
+            hitSparks.forEach(p => {
+                ctx.globalAlpha = p.life / 20;
+                ctx.fillStyle = p.color;
+                if (Math.random() < 0.5) ctx.fillStyle = '#FFFFFF'; // Sparkle
+
+                const s = 2 + (1 - p.life / 20) * 4;
+
+                // Star shape for sparks
+                if (p.life > 5) {
+                    ctx.save();
+                    ctx.translate(p.x, p.y);
+                    ctx.rotate(frameCount * 0.5);
+                    ctx.fillRect(-s / 2, -1, s, 2);
+                    ctx.fillRect(-1, -s / 2, 2, s);
+                    ctx.restore();
+                } else {
+                    ctx.fillRect(p.x - s / 2, p.y - s / 2, s, s);
+                }
+            });
+
+            projectiles.forEach(p => {
+                ctx.globalAlpha = 0.8;
+                if (p.type === 'beam') {
+                    // Beam effect
+                    for (let i = 0; i < 3; i++) {
+                        ctx.fillStyle = p.color;
+                        ctx.globalAlpha = 0.6 - i * 0.15;
+                        const s = p.size + i * 6;
+                        ctx.beginPath();
+                        ctx.arc(p.x, p.y, s / 2, 0, Math.PI * 2);
+                        ctx.fill();
+                    }
+                    // Trail
+                    ctx.fillStyle = p.color;
+                    ctx.globalAlpha = 0.3;
+                    ctx.fillRect(p.x - p.vx * 3, p.y - p.size / 4, p.vx * 3, p.size / 2);
+                } else if (p.type === 'wave') {
+                    // Crescent wave
+                    ctx.save();
+                    ctx.translate(p.x, p.y);
+                    ctx.rotate(p.vx > 0 ? 0 : Math.PI);
+                    for (let i = 0; i < 3; i++) {
+                        ctx.fillStyle = p.color;
+                        ctx.globalAlpha = 0.7 - i * 0.2;
+                        ctx.beginPath();
+                        ctx.arc(0, 0, p.size + i * 8, -0.5, 0.5);
+                        ctx.lineTo(0, 0);
+                        ctx.fill();
+                    }
+                    ctx.restore();
+                }
+            });
+
+            comboText.forEach(t => {
+                ctx.globalAlpha = t.life / 40;
+                ctx.fillStyle = t.color;
+                ctx.font = '16px "Press Start 2P"';
+                ctx.textAlign = 'center';
+                ctx.fillText(t.text, t.x, t.y);
+            });
+
+            ctx.globalAlpha = 1;
+        }
+
+        // === SCREENS ===
+        function drawMenu() {
+            // Background
+            const grad = ctx.createLinearGradient(0, 0, 0, canvas.height);
+            grad.addColorStop(0, '#0a001a');
+            grad.addColorStop(0.5, '#1a0033');
+            grad.addColorStop(1, '#0a001a');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Animated background particles
+            for (let i = 0; i < 30; i++) {
+                const px = (i * 73 + frameCount * 0.5) % canvas.width;
+                const py = (i * 47 + frameCount * 0.3) % canvas.height;
+                ctx.fillStyle = `rgba(100, 50, 200, ${0.2 + Math.sin(frameCount * 0.05 + i) * 0.15})`;
+                ctx.fillRect(px, py, 3, 3);
+            }
+
+            // Title
+            ctx.textAlign = 'center';
+
+            // Shadow
+            ctx.fillStyle = '#000000';
+            ctx.font = '36px "Press Start 2P"';
+            ctx.fillText('ANIME PIXEL', canvas.width / 2 + 3, 153);
+            ctx.fillText('FIGHTERS', canvas.width / 2 + 3, 203);
+
+            // Main text with glow
+            const titleHue = (frameCount * 2) % 360;
+            ctx.fillStyle = `hsl(${titleHue}, 100%, 60%)`;
+            ctx.font = '36px "Press Start 2P"';
+            ctx.fillText('ANIME PIXEL', canvas.width / 2, 150);
+            ctx.fillText('FIGHTERS', canvas.width / 2, 200);
+
+            // Subtitle
+            ctx.fillStyle = '#AAAACC';
+            ctx.font = '12px "Press Start 2P"';
+            ctx.fillText('~ ULTIMATE BATTLE ~', canvas.width / 2, 240);
+
+            // Characters preview
+            const previewY = 350;
+            for (let i = 0; i < characters.length; i++) {
+                const px = 80 + i * 110;
+                const bobY = Math.sin(frameCount * 0.05 + i * 0.7) * 5;
+                ctx.save();
+                ctx.translate(px, previewY + bobY);
+
+                if (characters[i].loadedImage && characters[i].loadedImage.complete && characters[i].loadedImage.naturalWidth !== 0) {
+                    const scale = characters[i].imageScale || 1;
+                    const h = 50 * scale;
+                    const ratio = characters[i].loadedImage.naturalWidth / characters[i].loadedImage.naturalHeight;
+                    const w = h * ratio;
+                    ctx.drawImage(characters[i].loadedImage, -w / 2, -h, w, h);
+                } else {
+                    characters[i].portrait(0, 0, 2, false);
+                }
+
+                ctx.restore();
+            }
+
+            // Menu Options
+            const options = ['ARCADE MODE', 'TRAINING MODE'];
+            const startY = 460;
+
+            options.forEach((opt, i) => {
+                const isSelected = i === menuSelection;
+                ctx.fillStyle = isSelected ? '#FFDD00' : '#8888AA';
+                ctx.font = isSelected ? '20px "Press Start 2P"' : '16px "Press Start 2P"';
+                ctx.textAlign = 'center';
+
+                // Pulsate selected
+                if (isSelected) {
+                    const scale = 1 + Math.sin(frameCount * 0.1) * 0.05;
+                    ctx.save();
+                    ctx.translate(canvas.width / 2, startY + i * 40);
+                    ctx.scale(scale, scale);
+                    ctx.fillText((isSelected ? '> ' : '') + opt + (isSelected ? ' <' : ''), 0, 0);
+                    ctx.restore();
+                } else {
+                    ctx.fillText(opt, canvas.width / 2, startY + i * 40);
+                }
+            });
+
+            // Instructions
+            ctx.fillStyle = '#666688';
+            ctx.font = '10px "Press Start 2P"';
+            ctx.fillText('USE ARROWS / TAP TO SELECT', canvas.width / 2, 530);
+
+            // Footer
+            ctx.fillStyle = '#555577';
+            ctx.font = '8px "Press Start 2P"';
+            ctx.fillText('8 FIGHTERS | SPECIAL MOVES | ULTIMATE ATTACKS', canvas.width / 2, 550);
+        }
+
+        function drawSelect() {
+            // Background
+            const grad = ctx.createLinearGradient(0, 0, canvas.width, canvas.height);
+            grad.addColorStop(0, '#0a0a2a');
+            grad.addColorStop(1, '#1a0a2a');
+            ctx.fillStyle = grad;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Title
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#FFDD00';
+            ctx.font = '20px "Press Start 2P"';
+            ctx.fillText(selectPhase === 1 ? 'PLAYER 1 - SELECT FIGHTER' : 'PLAYER 2 (CPU) - SELECT FIGHTER', canvas.width / 2, 40);
+
+            // Character grid
+            const cols = 4;
+            const cellW = 120;
+            const cellH = 130;
+            const startX = (canvas.width - cols * cellW) / 2;
+            const startY = 70;
+
+            for (let i = 0; i < characters.length; i++) {
+                const col = i % cols;
+                const row = Math.floor(i / cols);
+                const cx = startX + col * cellW + cellW / 2;
+                const cy = startY + row * cellH + cellH / 2;
+
+                // Cell background
+                let cellColor = 'rgba(30, 30, 60, 0.8)';
+                if (i === selectedP1 && selectPhase === 2) cellColor = 'rgba(0, 100, 200, 0.4)';
+                if (i === selectCursor) cellColor = `rgba(255, 255, 100, ${0.3 + Math.sin(frameCount * 0.1) * 0.15})`;
+
+                ctx.fillStyle = cellColor;
+                ctx.fillRect(cx - cellW / 2 + 5, cy - cellH / 2 + 5, cellW - 10, cellH - 10);
+
+                // Border
+                ctx.strokeStyle = i === selectCursor ? '#FFDD00' : '#444466';
+                ctx.lineWidth = i === selectCursor ? 3 : 1;
+                ctx.strokeRect(cx - cellW / 2 + 5, cy - cellH / 2 + 5, cellW - 10, cellH - 10);
+
+                // Character
+                ctx.save();
+                ctx.translate(cx, cy + 15);
+                if (characters[i].loadedImage && characters[i].loadedImage.complete && characters[i].loadedImage.naturalWidth !== 0) {
+                    const scale = characters[i].imageScale || 1;
+                    const h = 50 * scale;
+                    const ratio = characters[i].loadedImage.naturalWidth / characters[i].loadedImage.naturalHeight;
+                    const w = h * ratio;
+                    ctx.drawImage(characters[i].loadedImage, -w / 2, -h, w, h);
+                } else {
+                    characters[i].portrait(0, 0, 2, false);
+                }
+                ctx.restore();
+
+                // Name
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = '8px "Press Start 2P"';
+                ctx.textAlign = 'center';
+                ctx.fillText(characters[i].name, cx, cy - cellH / 2 + 18);
+
+                // Series
+                ctx.fillStyle = '#888899';
+                ctx.font = '6px "Press Start 2P"';
+                ctx.fillText(characters[i].series, cx, cy + cellH / 2 - 10);
+
+                // P1 marker
+                if (i === selectedP1 && selectPhase === 2) {
+                    ctx.fillStyle = '#00AAFF';
+                    ctx.font = '10px "Press Start 2P"';
+                    ctx.fillText('P1', cx - cellW / 2 + 20, cy - cellH / 2 + 20);
+                }
+            }
+
+            // Selected character info
+            const sel = characters[selectCursor];
+            const infoY = 380;
+            ctx.fillStyle = 'rgba(20, 20, 40, 0.9)';
+            ctx.fillRect(50, infoY, canvas.width - 100, 180);
+            ctx.strokeStyle = '#444466';
+            ctx.lineWidth = 2;
+            ctx.strokeRect(50, infoY, canvas.width - 100, 180);
+
+            // Character preview large
+            ctx.save();
+            ctx.translate(150, infoY + 120);
+            if (sel.loadedImage && sel.loadedImage.complete && sel.loadedImage.naturalWidth !== 0) {
+                const scale = sel.imageScale || 1;
+                const h = 100 * scale;
+                const ratio = sel.loadedImage.naturalWidth / sel.loadedImage.naturalHeight;
+                const w = h * ratio;
+                ctx.drawImage(sel.loadedImage, -w / 2, -h, w, h);
+            } else {
+                sel.portrait(0, 0, 4, false);
+            }
+            ctx.restore();
+
+            // Stats
+            ctx.textAlign = 'left';
+            ctx.fillStyle = '#FFDD00';
+            ctx.font = '14px "Press Start 2P"';
+            ctx.fillText(sel.name, 280, infoY + 30);
+            ctx.fillStyle = '#888899';
+            ctx.font = '10px "Press Start 2P"';
+            ctx.fillText(sel.series, 280, infoY + 50);
+
+            // Stat bars
+            const stats = [
+                { label: 'HP', value: sel.hp / 12, color: '#00CC44' },
+                { label: 'ATK', value: sel.atk, color: '#CC4444' },
+                { label: 'DEF', value: sel.def, color: '#4444CC' },
+                { label: 'SPD', value: sel.speed * 10, color: '#CCCC00' }
+            ];
+
+            stats.forEach((stat, i) => {
+                const sy = infoY + 70 + i * 22;
+                ctx.fillStyle = '#AAAACC';
+                ctx.font = '8px "Press Start 2P"';
+                ctx.fillText(stat.label, 280, sy);
+                ctx.fillStyle = '#222233';
+                ctx.fillRect(340, sy - 8, 200, 12);
+                ctx.fillStyle = stat.color;
+                ctx.fillRect(340, sy - 8, stat.value * 2, 12);
+            });
+
+            // Special move
+            ctx.fillStyle = '#FF8844';
+            ctx.font = '10px "Press Start 2P"';
+            ctx.fillText('SPECIAL: ' + sel.special, 600, infoY + 80);
+            ctx.fillStyle = '#8888AA';
+            ctx.font = '8px "Press Start 2P"';
+            ctx.fillText('TYPE: ' + sel.specialType.toUpperCase(), 600, infoY + 100);
+
+            // Aura color preview
+            ctx.fillStyle = sel.auraColor;
+            ctx.beginPath();
+            ctx.arc(650, infoY + 140, 20, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = sel.specialColor;
+            ctx.beginPath();
+            ctx.arc(700, infoY + 140, 15, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.fillStyle = '#8888AA';
+            ctx.fillText('AURA', 640, infoY + 170);
+
+            // Instructions
+            ctx.textAlign = 'center';
+            ctx.fillStyle = '#666688';
+            ctx.font = '8px "Press Start 2P"';
+            ctx.fillText('ARROWS: Navigate | ENTER: Select | ESC: Back', canvas.width / 2, canvas.height - 15);
+        }
+
+        function drawVictoryScreen() {
+            // Darken
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.7)';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Winner announcement
+            ctx.textAlign = 'center';
+            const winnerColor = `hsl(${(frameCount * 3) % 360}, 100%, 60%)`;
+            ctx.fillStyle = winnerColor;
+            ctx.font = '32px "Press Start 2P"';
+            ctx.fillText(roundWinner + ' WINS!', canvas.width / 2, 200);
+
+            // Draw winner character
+            const winnerChar = roundWinner === player1.name ? characters[player1.charIndex] : characters[player2.charIndex];
+            ctx.save();
+            ctx.translate(canvas.width / 2, 370);
+
+            // Victory aura
+            for (let i = 0; i < 3; i++) {
+                ctx.globalAlpha = 0.2 + Math.sin(frameCount * 0.1 + i) * 0.1;
+                ctx.fillStyle = winnerChar.specialColor;
+                ctx.beginPath();
+                ctx.arc(0, -30, 60 + i * 20 + Math.sin(frameCount * 0.1) * 10, 0, Math.PI * 2);
+                ctx.fill();
+            }
+            ctx.globalAlpha = 1;
+
+            winnerChar.portrait(0, 0, 5, false);
+            if (winnerChar.loadedImage && winnerChar.loadedImage.complete && winnerChar.loadedImage.naturalWidth !== 0) {
+                const scale = winnerChar.imageScale || 1;
+                const h = 120 * scale;
+                const ratio = winnerChar.loadedImage.naturalWidth / winnerChar.loadedImage.naturalHeight;
+                const w = h * ratio;
+                ctx.drawImage(winnerChar.loadedImage, -w / 2, -h, w, h);
+            } else {
+                winnerChar.portrait(0, 0, 5, false);
+            }
+            ctx.restore();
+
+            // Victory particles
+            for (let i = 0; i < 5; i++) {
+                const px = (frameCount * 3 + i * 200) % canvas.width;
+                const py = (Math.sin(frameCount * 0.02 + i) * 0.5 + 0.5) * canvas.height;
+                ctx.fillStyle = `hsl(${(frameCount + i * 50) % 360}, 100%, 70%)`;
+                ctx.fillRect(px, py, 4, 4);
+            }
+
+            // Continue prompt
+            const blink = Math.sin(frameCount * 0.08) > 0;
+            if (blink) {
+                ctx.fillStyle = '#FFFFFF';
+                ctx.font = '14px "Press Start 2P"';
+                ctx.fillText('PRESS ENTER TO CONTINUE', canvas.width / 2, 520);
+            }
+        }
+
+        // === MAIN LOOP ===
+        function gameLoop() {
+            frameCount++;
+
+            if (gameState === 'menu') {
+                updateMenu();
+                drawMenu();
+            } else if (gameState === 'select') {
+                drawSelect();
+            } else if (gameState === 'fight') {
+                updateFight();
+                drawFight();
+            } else if (gameState === 'cinematic') {
+                updateCinematic();
+                drawCinematic();
+            } else if (gameState === 'victory') {
+                drawFight();
+                drawVictoryScreen();
+            }
+
+            requestAnimationFrame(gameLoop);
+        }
+
+        function updateCinematic() {
+            cinematicTimer--;
+            shakeAmount = 10;
+
+            if (cinematicType === 'goku_transform') {
+                // Ground Cracks / Dust
+                if (cinematicTimer > 60 && cinematicTimer % 10 === 0) {
+                    for (let i = 0; i < 5; i++) {
+                        particles.push({
+                            x: cinematicTarget.x + (Math.random() - 0.5) * 100,
+                            y: 400,
+                            vx: (Math.random() - 0.5) * 5,
+                            vy: -Math.random() * 8,
+                            life: 40,
+                            color: '#888',
+                            size: 2 + Math.random() * 4
+                        });
+                    }
+                }
+
+                // Rising Rocks
+                if (cinematicTimer > 40 && cinematicTimer % 20 === 0) {
+                    particles.push({
+                        x: cinematicTarget.x + (Math.random() - 0.5) * 150,
+                        y: 400,
+                        vx: 0,
+                        vy: -1 - Math.random() * 0.5,
+                        life: 150,
+                        color: '#444',
+                        size: 6 + Math.random() * 8,
+                        type: 'rock'
+                    });
+                }
+
+                // End cinematic
+                if (cinematicTimer <= 0) {
+                    gameState = 'fight';
+                    cinematicTarget.finishTransform();
+                    shakeAmount = 40;
+                    slowMotion = 0;
+                }
+            }
+        }
+
+        function drawCinematic() {
+            // Draw regular fight stuff first
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            drawBackground();
+            drawHUD();
+            drawWeather();
+
+            // Shadows
+            ctx.fillStyle = 'rgba(0,0,0,0.3)';
+            ctx.fillRect(player1.x - 20, 395, 40, 10);
+            ctx.fillRect(player2.x - 20, 395, 40, 10);
+
+            drawParticles();
+            player1.draw();
+            player2.draw();
+
+            // Screen focus
+            const overlay = Math.min(0.7, (180 - cinematicTimer) / 60);
+            ctx.fillStyle = `rgba(0, 0, 0, ${overlay})`;
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+            // Focus light on target
+            ctx.save();
+            ctx.globalCompositeOperation = 'destination-out';
+            const grad = ctx.createRadialGradient(cinematicTarget.x, cinematicTarget.y - 30, 50, cinematicTarget.x, cinematicTarget.y - 30, 250);
+            grad.addColorStop(0, 'rgba(0,0,0,1)');
+            grad.addColorStop(1, 'rgba(0,0,0,0)');
+            ctx.fillStyle = grad;
+            ctx.beginPath();
+            ctx.arc(cinematicTarget.x, cinematicTarget.y - 30, 250, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.restore();
+
+            // Re-draw target in focus
+            cinematicTarget.draw();
+
+            // Ground cracks
+            ctx.strokeStyle = 'rgba(0,0,0,0.8)';
+            ctx.lineWidth = 3;
+            ctx.beginPath();
+            for (let i = 0; i < 8; i++) {
+                const angle = (i / 8) * Math.PI * 2;
+                const r = Math.min(150, (180 - cinematicTimer) * 2);
+                ctx.moveTo(cinematicTarget.x, 398);
+                ctx.lineTo(cinematicTarget.x + Math.cos(angle) * r, 398 + Math.sin(angle) * 15);
+            }
+            ctx.stroke();
+
+            // Rising rocks (particles of type 'rock') are already drawn in drawParticles()
+            // but I need to handle 'rock' type in drawParticles
+
+            // Flash
+            if (cinematicTimer < 40 && cinematicTimer % 3 === 0) {
+                ctx.fillStyle = 'rgba(255, 255, 255, 0.6)';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+            }
+        }
+
+        function updateMenu() {
+            if (keysPressed['ArrowUp'] || keysPressed['KeyW'] || keysPressed['ArrowLeft']) {
+                menuSelection = 0;
+                playSound('select'); // Future proofing
+            }
+            if (keysPressed['ArrowDown'] || keysPressed['KeyS'] || keysPressed['ArrowRight']) {
+                menuSelection = 1;
+                playSound('select');
+            }
+            // Tap/Enter is handled via event listeners
+        }
+
+        // Helper to track single key presses
+        let keysPressed = {};
+        window.addEventListener('keydown', (e) => {
+            if (!keysPressed[e.code]) keysPressed[e.code] = true;
+        });
+        window.addEventListener('keyup', (e) => {
+            keysPressed[e.code] = false;
+        });
+        // We need to map touch buttons to keysPressed too?
+        // Actually, existing keys object is for continuous hold.
+        // Let's use a simple debounce in updateMenu instead of new listeners.
+
+        function updateMenu() {
+            if (frameCount % 10 === 0) {
+                if (keys['ArrowUp'] || keys['KeyW'] || keys['ArrowLeft']) menuSelection = 0;
+                if (keys['ArrowDown'] || keys['KeyS'] || keys['ArrowRight']) menuSelection = 1;
+            }
+        }
+
+        function updateFight() {
+            if (pauseTimer > 0) {
+                pauseTimer--;
+                return;
+            }
+
+            // Check for slow motion
+            const speedMult = slowMotion > 0 ? 0.3 : 1;
+            if (slowMotion > 0) slowMotion--;
+
+            // Timer (Disable in Training)
+            if (gameMode !== 'training') {
+                timerCounter++;
+                if (timerCounter > 60) {
+                    timerCounter = 0;
+                    roundTimer--;
+                    if (roundTimer <= 0) {
+                        if (player1.hp > player2.hp) roundWinner = player1.name;
+                        else if (player2.hp > player1.hp) roundWinner = player2.name;
+                        else roundWinner = 'DRAW';
+                        gameState = 'victory';
+                        return;
+                    }
+                }
+            }
+
+            // Player 1 input
+            if (player1.hitStun <= 0 && player1.state !== 'special' && player1.state !== 'ultimate') {
+                if (keys['KeyA'] || keys['ArrowLeft']) {
+                    player1.vx = -player1.speed * speedMult;
+                    if (player1.state === 'idle') player1.state = 'walk';
+                }
+                if (keys['KeyD'] || keys['ArrowRight']) {
+                    player1.vx = player1.speed * speedMult;
+                    if (player1.state === 'idle') player1.state = 'walk';
+                }
+                if (keys['KeyW'] || keys['ArrowUp']) player1.jump();
+                if (keys['KeyJ']) player1.punch();
+                if (keys['KeyK']) player1.kick();
+                if (keys['KeyQ']) player1.special();
+                if (keys['KeyE']) player1.ultimate();
+                if (keys['KeyL']) player1.blocking = true; else player1.blocking = false;
+                if (keys['KeyT']) player1.transform();
+
+                if (!keys['KeyA'] && !keys['ArrowLeft'] && !keys['KeyD'] && !keys['ArrowRight'] && player1.state === 'walk') {
+                    player1.state = 'idle';
+                }
+            } else {
+                player1.blocking = false;
+            }
+
+            // AI (Disable in Training)
+            if (gameMode !== 'training') {
+                ai.update(player1);
+            } else {
+                // Dummy logic - regen HP/stay idle
+                player2.vx = 0;
+                player2.state = 'idle';
+                if (player2.y < 400) player2.vy += 0.5; // Gravity
+
+                // Infinite HP for Dummy
+                if (player2.hp < player2.maxHp) player2.hp += 10;
+
+                // P1 Infinite Energy
+                if (player1.energy < player1.maxEnergy) player1.energy += 5;
+            }
+
+            // Update fighters
+            player1.update(player2);
+            player2.update(player1);
+
+            // Check collisions
+            if (player1.attackBox) checkHit(player1, player2);
+            if (player2.attackBox) checkHit(player2, player1);
+
+            // Energy caps
+            if (player1.energy > player1.maxEnergy) player1.energy = player1.maxEnergy;
+            if (player2.energy > player2.maxEnergy) player2.energy = player2.maxEnergy;
+
+            // Update effects
+            updateParticles();
+            updateWeather();
+
+            // Constant aura particles for special state
+            if (player1.state === 'special' || player1.state === 'ultimate') {
+                particles.push({
+                    x: player1.x + (Math.random() - 0.5) * 30,
+                    y: player1.y - Math.random() * 60,
+                    vx: (Math.random() - 0.5) * 2,
+                    vy: -2 - Math.random() * 3,
+                    life: 20 + Math.random() * 10,
+                    color: characters[player1.charIndex].specialColor,
+                    size: 2 + Math.random() * 3
+                });
+            }
+            if (player2.state === 'special' || player2.state === 'ultimate') {
+                particles.push({
+                    x: player2.x + (Math.random() - 0.5) * 30,
+                    y: player2.y - Math.random() * 60,
+                    vx: (Math.random() - 0.5) * 2,
+                    vy: -2 - Math.random() * 3,
+                    life: 20 + Math.random() * 10,
+                    color: characters[player2.charIndex].specialColor,
+                    size: 2 + Math.random() * 3
+                });
+            }
+
+            // Screen shake decay
+            if (shakeAmount > 0) shakeAmount *= 0.9;
+            if (shakeAmount < 0.5) shakeAmount = 0;
+
+            // Check victory (Only in Vs)
+            if (gameMode === 'vs') {
+                if (player1.hp <= 0) {
+                    roundWinner = player2.name;
+                    gameState = 'victory';
+                    shakeAmount = 15;
+                    createDeathParticles(player1);
+                }
+                if (player2.hp <= 0) {
+                    roundWinner = player1.name;
+                    gameState = 'victory';
+                    shakeAmount = 15;
+                    createDeathParticles(player2);
+                }
+            }
+        }
+
+        function createDeathParticles(p) {
+            for (let i = 0; i < 40; i++) {
+                particles.push({
+                    x: p.x, y: p.y - 30,
+                    vx: (Math.random() - 0.5) * 15,
+                    vy: (Math.random() - 0.5) * 15,
+                    life: 50, color: '#FF4444', size: 4 + Math.random() * 4
+                });
+            }
+        }
+
+        function drawFight() {
+            ctx.save();
+
+            // Screen shake
+            if (shakeAmount > 0) {
+                ctx.translate(
+                    (Math.random() - 0.5) * shakeAmount * 2,
+                    (Math.random() - 0.5) * shakeAmount * 2
+                );
+            }
+
+            drawBackground();
+            drawWeather();
+
+            // Shadows
+            ctx.fillStyle = 'rgba(0, 0, 0, 0.3)';
+            ctx.beginPath();
+            ctx.ellipse(player1.x, 405, 25, 6, 0, 0, Math.PI * 2);
+            ctx.fill();
+            ctx.beginPath();
+            ctx.ellipse(player2.x, 405, 25, 6, 0, 0, Math.PI * 2);
+            ctx.fill();
+
+            // Draw fighters
+            player1.draw();
+            player2.draw();
+
+            // Draw block indicator
+            if (player1.blocking) {
+                ctx.strokeStyle = 'rgba(100, 200, 255, 0.6)';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(player1.x, player1.y - 25, 30, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+            if (player2.blocking) {
+                ctx.strokeStyle = 'rgba(100, 200, 255, 0.6)';
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(player2.x, player2.y - 25, 30, 0, Math.PI * 2);
+                ctx.stroke();
+            }
+
+            // Draw particles and effects
+            drawParticles();
+
+            ctx.restore();
+
+            // HUD (not affected by shake)
+            drawHUD();
+
+            // Round start text
+            if (pauseTimer > 0) {
+                ctx.textAlign = 'center';
+                if (pauseTimer > 50) {
+                    ctx.fillStyle = '#FFFFFF';
+                    ctx.font = '36px "Press Start 2P"';
+                    ctx.fillText('READY?', canvas.width / 2, canvas.height / 2);
+                } else if (pauseTimer > 20) {
+                    ctx.fillStyle = '#FF4444';
+                    ctx.font = '48px "Press Start 2P"';
+                    ctx.fillText('FIGHT!', canvas.width / 2, canvas.height / 2);
+                }
+            }
+
+            // Low HP warning flash
+            if (player1.hp < player1.maxHp * 0.2 && player1.hp > 0) {
+                ctx.fillStyle = `rgba(255, 0, 0, ${Math.sin(frameCount * 0.15) * 0.1})`;
+                ctx.fillRect(0, 0, canvas.width / 2, canvas.height);
+            }
+            if (player2.hp < player2.maxHp * 0.2 && player2.hp > 0) {
+                ctx.fillStyle = `rgba(255, 0, 0, ${Math.sin(frameCount * 0.15) * 0.1})`;
+                ctx.fillRect(canvas.width / 2, 0, canvas.width / 2, canvas.height);
+            }
+        }
+
+        // Start
+        // === MOBILE CONTROLS ===
+        const touchMap = {
+            'btn-up': 'ArrowUp',
+            'btn-down': 'ArrowDown',
+            'btn-left': 'ArrowLeft',
+            'btn-right': 'ArrowRight',
+            'btn-punch': 'KeyJ',
+            'btn-kick': 'KeyK',
+            'btn-block': 'KeyL',
+            'btn-special': 'KeyQ',
+            'btn-ult': 'KeyE',
+            'btn-trans': 'KeyT',
+            'btn-esc': 'Escape',
+            'btn-enter': 'Enter'
+        };
+
+        Object.keys(touchMap).forEach(id => {
+            const btn = document.getElementById(id);
+            if (!btn) return;
+
+            btn.addEventListener('touchstart', (e) => {
+                e.preventDefault();
+                keys[touchMap[id]] = true;
+                // Visual feedback
+                btn.style.background = 'rgba(255, 255, 255, 0.5)';
+            }, { passive: false });
+
+            btn.addEventListener('touchend', (e) => {
+                e.preventDefault();
+                keys[touchMap[id]] = false;
+                // Reset visual
+                btn.style.background = '';
+            }, { passive: false });
+
+            // Also handle mouse for testing on PC
+            btn.addEventListener('mousedown', (e) => {
+                e.preventDefault();
+                keys[touchMap[id]] = true;
+            });
+            btn.addEventListener('mouseup', (e) => {
+                e.preventDefault();
+                keys[touchMap[id]] = false;
+            });
+        });
+
+        // === FULLSCREEN & TOUCH START ===
+        const fullScreenBtn = document.getElementById('btn-fullscreen');
+        if (fullScreenBtn) {
+            fullScreenBtn.addEventListener('click', () => {
+                if (!document.fullscreenElement) {
+                    if (canvas.requestFullscreen) canvas.requestFullscreen();
+                    else if (canvas.mozRequestFullScreen) canvas.mozRequestFullScreen();
+                    else if (canvas.webkitRequestFullscreen) canvas.webkitRequestFullscreen();
+                    else if (canvas.msRequestFullscreen) canvas.msRequestFullscreen();
+                } else {
+                    if (document.exitFullscreen) document.exitFullscreen();
+                }
+            });
+        }
+
+        // Tap to Start / Continue
+        canvas.addEventListener('touchstart', handleTap);
+        canvas.addEventListener('mousedown', handleTap);
+
+        function handleTap(e) {
+            e.preventDefault();
+            const rect = canvas.getBoundingClientRect();
+            // Handle both touch and mouse events
+            const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+            const y = (clientY - rect.top) * (canvas.height / rect.height);
+
+            if (gameState === 'menu') {
+                // Check if tapping specific options
+                if (y > 440 && y < 480) {
+                    menuSelection = 0; // Arcade
+                    gameState = 'select';
+                    selectPhase = 1;
+                    gameMode = 'vs';
+                } else if (y > 480 && y < 520) {
+                    menuSelection = 1; // Training
+                    gameState = 'select';
+                    selectPhase = 1;
+                    gameMode = 'training';
+                } else {
+                    // Tap anywhere else defaults to current selection
+                    gameState = 'select';
+                    selectPhase = 1;
+                    gameMode = menuSelection === 1 ? 'training' : 'vs';
+                }
+                selectCursor = 0;
+                // Init music if needed (not implemented but standard practice)
+            } else if (gameState === 'victory') {
+                // Return to menu or restart
+                if (frameCount % 60 < 30) return; // Debounce
+                gameState = 'menu';
+                // Reset basic state
+                player1.hp = player1.maxHp;
+                player2.hp = player2.maxHp;
+                player1.isTransformed = false;
+                player2.isTransformed = false;
+            }
+        }
+
+        gameLoop();
+    </script>
+</body>
+
+</html>
